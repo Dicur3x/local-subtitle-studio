@@ -32,6 +32,7 @@ class JsonSettingsRepositoryTest {
                 "C:\\Tools\\ffprobe.exe",
                 "",
                 "",
+                "",
                 "C:\\Temp"
         );
 

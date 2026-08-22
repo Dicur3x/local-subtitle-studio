@@ -32,7 +32,10 @@ public final class ExternalToolValidator {
                 cancellationRequested));
         checks.add(checkExecutable("whisper.cpp", settings.whisperExecutable(), List.of("-h"), false,
                 cancellationRequested));
-        checks.add(checkModel(settings.whisperModel()));
+        checks.add(checkModel("Whisper model", settings.whisperModel(),
+                "Not needed until transcription is enabled"));
+        checks.add(checkModel("VAD model", settings.whisperVadModel(),
+                "Installed automatically with a managed model"));
         checks.add(checkTemporaryDirectory(settings.temporaryDirectory()));
         return new ToolValidationReport(checks);
     }
@@ -70,20 +73,19 @@ public final class ExternalToolValidator {
         }
     }
 
-    private static ToolCheck checkModel(String modelPath) {
+    private static ToolCheck checkModel(String name, String modelPath, String notConfiguredMessage) {
         if (modelPath.isBlank()) {
-            return new ToolCheck("Whisper model", ToolStatus.NOT_CONFIGURED, false,
-                    "Not needed until transcription is enabled");
+            return new ToolCheck(name, ToolStatus.NOT_CONFIGURED, false, notConfiguredMessage);
         }
         try {
             Path path = Path.of(modelPath).toAbsolutePath().normalize();
             if (Files.isRegularFile(path) && Files.isReadable(path)) {
-                return new ToolCheck("Whisper model", ToolStatus.AVAILABLE, false,
+                return new ToolCheck(name, ToolStatus.AVAILABLE, false,
                         path.getFileName().toString());
             }
-            return new ToolCheck("Whisper model", ToolStatus.ERROR, false, "File cannot be read");
+            return new ToolCheck(name, ToolStatus.ERROR, false, "File cannot be read");
         } catch (InvalidPathException exception) {
-            return new ToolCheck("Whisper model", ToolStatus.ERROR, false, "Path is invalid");
+            return new ToolCheck(name, ToolStatus.ERROR, false, "Path is invalid");
         }
     }
 

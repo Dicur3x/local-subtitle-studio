@@ -3,6 +3,8 @@
 - Status: accepted for MVP 1
 - Date: 2026-08-22
 
+The manual-path decision below remains supported. ADR 0003 adds user-initiated managed downloads without embedding third-party binaries in this repository.
+
 ## Decision
 
 Keep FFmpeg, FFprobe, whisper.cpp, and model locations in persistent user settings. FFmpeg and FFprobe are required for the current media workflow; whisper.cpp and a model are optional until transcription is implemented.
@@ -41,4 +43,4 @@ No shell is involved. The external-process runner drains output concurrently and
 - WAV working files are larger than compressed source audio but are temporary and predictable.
 - Normal application shutdown provides deterministic cleanup; abnormal process termination may leave a temporary directory for later housekeeping.
 - The settings format is versioned JSON so it can evolve without coupling the UI to storage details.
-- Bundling and automatic installation of third-party tools remain separate, future distribution decisions.
+- Managed, user-initiated downloads are defined by ADR 0003; packaging third-party binaries with the application remains a separate future distribution decision.

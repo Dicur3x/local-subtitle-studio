@@ -50,6 +50,7 @@ public final class MainView implements AutoCloseable {
 
     private final MediaProbe mediaProbe;
     private final AudioExtractor audioExtractor;
+    private final Consumer<Window> componentsAction;
     private final Consumer<Window> settingsAction;
     private final AudioTrackDisplayFormatter trackFormatter = new AudioTrackDisplayFormatter();
     private final ExecutorService worker = Executors.newVirtualThreadPerTaskExecutor();
@@ -60,7 +61,8 @@ public final class MainView implements AutoCloseable {
     private final Label error = new Label();
     private final ProgressIndicator progress = new ProgressIndicator();
     private final Button cancelButton = new Button("Cancel");
-    private final Button settingsButton = new Button("Settings");
+    private final Button componentsButton = new Button("Components");
+    private final Button settingsButton = new Button("Advanced settings");
     private final Button prepareAudioButton = new Button("Prepare audio");
     private final ComboBox<AudioTrack> audioTracks = new ComboBox<>();
     private final VBox mediaDetails = new VBox(14);
@@ -70,9 +72,15 @@ public final class MainView implements AutoCloseable {
     private MediaInfo currentMedia;
     private PreparedAudio preparedAudio;
 
-    public MainView(MediaProbe mediaProbe, AudioExtractor audioExtractor, Consumer<Window> settingsAction) {
+    public MainView(
+            MediaProbe mediaProbe,
+            AudioExtractor audioExtractor,
+            Consumer<Window> componentsAction,
+            Consumer<Window> settingsAction
+    ) {
         this.mediaProbe = Objects.requireNonNull(mediaProbe, "mediaProbe");
         this.audioExtractor = Objects.requireNonNull(audioExtractor, "audioExtractor");
+        this.componentsAction = Objects.requireNonNull(componentsAction, "componentsAction");
         this.settingsAction = Objects.requireNonNull(settingsAction, "settingsAction");
         buildView();
     }
@@ -86,19 +94,24 @@ public final class MainView implements AutoCloseable {
         brand.getStyleClass().add("brand");
         Label heading = new Label("Create subtitles without uploading your video");
         heading.getStyleClass().add("heading");
+        heading.setWrapText(true);
         Label intro = new Label("Drop one video below. We’ll inspect its audio tracks locally with ffprobe.");
         intro.getStyleClass().add("muted");
+        intro.setWrapText(true);
 
         VBox title = new VBox(8, brand, heading, intro);
+        componentsButton.getStyleClass().add("primary-button");
+        componentsButton.setOnAction(event -> componentsAction.accept(componentsButton.getScene().getWindow()));
         settingsButton.getStyleClass().add("quiet-button");
         settingsButton.setOnAction(event -> settingsAction.accept(settingsButton.getScene().getWindow()));
-        HBox titleRow = new HBox(18, title, spacer(), settingsButton);
-        titleRow.setAlignment(Pos.TOP_LEFT);
+        HBox headerActions = new HBox(10, componentsButton, settingsButton);
+        headerActions.setAlignment(Pos.CENTER_LEFT);
+        VBox header = new VBox(16, title, headerActions);
 
         VBox dropZone = createDropZone();
         buildMediaDetails();
 
-        VBox content = new VBox(26, titleRow, dropZone, mediaDetails, createStatusBar());
+        VBox content = new VBox(26, header, dropZone, mediaDetails, createStatusBar());
         content.setMaxWidth(820);
         content.setPadding(new Insets(42));
 
@@ -447,6 +460,7 @@ public final class MainView implements AutoCloseable {
     }
 
     private void setControlsBusy(boolean busy) {
+        componentsButton.setDisable(busy);
         settingsButton.setDisable(busy);
         audioTracks.setDisable(busy);
         prepareAudioButton.setDisable(busy);

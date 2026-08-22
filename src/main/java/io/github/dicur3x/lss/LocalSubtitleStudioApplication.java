@@ -3,17 +3,25 @@ package io.github.dicur3x.lss;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.dicur3x.lss.audio.AudioExtractor;
 import io.github.dicur3x.lss.audio.FfmpegAudioExtractor;
+import io.github.dicur3x.lss.components.FfmpegReleaseProvider;
+import io.github.dicur3x.lss.components.HttpDownloadClient;
+import io.github.dicur3x.lss.components.ManagedComponentInstaller;
+import io.github.dicur3x.lss.components.ManagedComponentStore;
+import io.github.dicur3x.lss.components.ManagedToolsService;
+import io.github.dicur3x.lss.components.WhisperReleaseProvider;
 import io.github.dicur3x.lss.infrastructure.process.DefaultExternalProcessRunner;
 import io.github.dicur3x.lss.infrastructure.process.ExternalProcessRunner;
 import io.github.dicur3x.lss.infrastructure.tools.ExternalToolValidator;
 import io.github.dicur3x.lss.media.MediaProbe;
 import io.github.dicur3x.lss.media.ffprobe.FfprobeMediaProbe;
+import io.github.dicur3x.lss.models.WhisperModelManager;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
 import io.github.dicur3x.lss.settings.JsonSettingsRepository;
 import io.github.dicur3x.lss.settings.SettingsException;
 import io.github.dicur3x.lss.settings.SettingsManager;
 import io.github.dicur3x.lss.settings.SettingsPaths;
 import io.github.dicur3x.lss.ui.MainView;
+import io.github.dicur3x.lss.ui.ComponentsDialog;
 import io.github.dicur3x.lss.ui.SettingsDialog;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -33,6 +41,7 @@ public final class LocalSubtitleStudioApplication extends Application {
     private MainView mainView;
     private SettingsManager settingsManager;
     private ExternalProcessRunner processRunner;
+    private ManagedToolsService managedToolsService;
     private String startupSettingsWarning;
 
     public static void main(String[] args) {
@@ -45,6 +54,7 @@ public final class LocalSubtitleStudioApplication extends Application {
     public void start(Stage stage) {
         processRunner = new DefaultExternalProcessRunner();
         settingsManager = loadSettings();
+        managedToolsService = createManagedToolsService();
         MediaProbe mediaProbe = (file, cancellationRequested) ->
                 new FfprobeMediaProbe(settingsManager.current().ffprobeExecutable(), processRunner)
                         .probe(file, cancellationRequested);
@@ -54,7 +64,7 @@ public final class LocalSubtitleStudioApplication extends Application {
                         settingsManager.current().temporaryDirectory(),
                         processRunner
                 ).extract(file, streamIndex, cancellationRequested);
-        mainView = new MainView(mediaProbe, audioExtractor, this::showSettings);
+        mainView = new MainView(mediaProbe, audioExtractor, this::showComponents, this::showSettings);
 
         Scene scene = new Scene(mainView.root(), 920, 690);
         scene.getStylesheets().add(Objects.requireNonNull(
@@ -84,6 +94,28 @@ public final class LocalSubtitleStudioApplication extends Application {
                     + "the correct tool paths. The existing settings file was not overwritten.";
             return new SettingsManager(repository, ApplicationSettings.defaults());
         }
+    }
+
+    private ManagedToolsService createManagedToolsService() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        HttpDownloadClient downloadClient = new HttpDownloadClient();
+        Path applicationData = SettingsPaths.applicationDataDirectory();
+        ManagedComponentStore store = new ManagedComponentStore(
+                applicationData.resolve("components"), objectMapper);
+        return new ManagedToolsService(
+                new FfmpegReleaseProvider(downloadClient),
+                new WhisperReleaseProvider(downloadClient, objectMapper),
+                store,
+                new ManagedComponentInstaller(downloadClient, store),
+                new WhisperModelManager(applicationData.resolve("models"), downloadClient, objectMapper),
+                settingsManager,
+                processRunner
+        );
+    }
+
+    private void showComponents(Window owner) {
+        new ComponentsDialog(managedToolsService, url -> getHostServices().showDocument(url))
+                .showAndWait(owner);
     }
 
     private void showSettings(Window owner) {

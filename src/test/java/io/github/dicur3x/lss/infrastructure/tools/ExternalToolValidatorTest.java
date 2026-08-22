@@ -14,7 +14,7 @@ class ExternalToolValidatorTest {
     void treatsWhisperAsOptionalUntilTranscriptionIsEnabled() {
         var validator = new ExternalToolValidator((command, cancelled) ->
                 new ProcessResult(0, command.getFirst() + " version 1", ""));
-        var settings = new ApplicationSettings(1, "ffmpeg", "ffprobe", "", "", "");
+        var settings = new ApplicationSettings(2, "ffmpeg", "ffprobe", "", "", "", "");
 
         ToolValidationReport report = validator.validate(settings, () -> false);
 
@@ -31,7 +31,7 @@ class ExternalToolValidatorTest {
             }
             return new ProcessResult(0, "available", "");
         });
-        var settings = new ApplicationSettings(1, "ffmpeg", "ffprobe", "", "", "");
+        var settings = new ApplicationSettings(2, "ffmpeg", "ffprobe", "", "", "", "");
 
         ToolValidationReport report = validator.validate(settings, () -> false);
 

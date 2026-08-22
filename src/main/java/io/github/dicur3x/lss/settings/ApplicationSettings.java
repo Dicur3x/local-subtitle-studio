@@ -9,9 +9,10 @@ public record ApplicationSettings(
         String ffprobeExecutable,
         String whisperExecutable,
         String whisperModel,
+        String whisperVadModel,
         String temporaryDirectory
 ) {
-    public static final int CURRENT_SCHEMA_VERSION = 1;
+    public static final int CURRENT_SCHEMA_VERSION = 2;
 
     public ApplicationSettings {
         schemaVersion = schemaVersion <= 0 ? CURRENT_SCHEMA_VERSION : schemaVersion;
@@ -19,6 +20,7 @@ public record ApplicationSettings(
         ffprobeExecutable = valueOrDefault(ffprobeExecutable, "ffprobe");
         whisperExecutable = normalize(whisperExecutable);
         whisperModel = normalize(whisperModel);
+        whisperVadModel = normalize(whisperVadModel);
         temporaryDirectory = normalize(temporaryDirectory);
     }
 
@@ -29,8 +31,24 @@ public record ApplicationSettings(
                 configuredValue("lss.ffprobe.path", "LSS_FFPROBE_PATH", "ffprobe"),
                 configuredValue("lss.whisper.path", "LSS_WHISPER_PATH", ""),
                 configuredValue("lss.whisper.model", "LSS_WHISPER_MODEL", ""),
+                configuredValue("lss.whisper.vad.model", "LSS_WHISPER_VAD_MODEL", ""),
                 configuredValue("lss.temp.path", "LSS_TEMP_PATH", "")
         );
+    }
+
+    public ApplicationSettings withManagedFfmpeg(String ffmpeg, String ffprobe) {
+        return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpeg, ffprobe, whisperExecutable,
+                whisperModel, whisperVadModel, temporaryDirectory);
+    }
+
+    public ApplicationSettings withManagedWhisper(String whisper) {
+        return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable, whisper,
+                whisperModel, whisperVadModel, temporaryDirectory);
+    }
+
+    public ApplicationSettings withManagedModels(String model, String vadModel) {
+        return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable,
+                whisperExecutable, model, vadModel, temporaryDirectory);
     }
 
     private static String configuredValue(String property, String environmentVariable, String fallback) {

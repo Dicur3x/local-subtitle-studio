@@ -43,8 +43,8 @@ public final class SettingsDialog {
     public Optional<ApplicationSettings> showAndWait(Window owner, ApplicationSettings current) {
         Dialog<ApplicationSettings> dialog = new Dialog<>();
         dialog.initOwner(owner);
-        dialog.setTitle("Local Subtitle Studio settings");
-        dialog.setHeaderText("External tools and local storage");
+        dialog.setTitle("Local Subtitle Studio advanced settings");
+        dialog.setHeaderText("Manual paths and local storage");
         dialog.setResizable(true);
         dialog.getDialogPane().getButtonTypes().addAll(SAVE, ButtonType.CANCEL);
         dialog.getDialogPane().setPrefWidth(820);
@@ -58,6 +58,7 @@ public final class SettingsDialog {
         TextField ffprobe = field(current.ffprobeExecutable(), "ffprobe or full path to ffprobe.exe");
         TextField whisper = field(current.whisperExecutable(), "whisper-cli or full path to whisper-cli.exe");
         TextField model = field(current.whisperModel(), "Not required until transcription is enabled");
+        TextField vadModel = field(current.whisperVadModel(), "Installed automatically with a managed model");
         TextField temporaryDirectory = field(current.temporaryDirectory(), "Blank means the system temp directory");
 
         GridPane grid = new GridPane();
@@ -73,11 +74,12 @@ public final class SettingsDialog {
         addExecutableRow(grid, 1, "FFprobe", ffprobe, dialog, "Choose ffprobe executable");
         addExecutableRow(grid, 2, "whisper.cpp CLI", whisper, dialog, "Choose whisper-cli executable");
         addFileRow(grid, 3, "Whisper model", model, dialog, "Choose Whisper model", "Whisper model", "*.bin");
-        addDirectoryRow(grid, 4, "Temporary files", temporaryDirectory, dialog);
+        addFileRow(grid, 4, "VAD model", vadModel, dialog, "Choose VAD model", "VAD model", "*.bin");
+        addDirectoryRow(grid, 5, "Temporary files", temporaryDirectory, dialog);
 
         Label explanation = new Label(
-                "FFmpeg and FFprobe are required now. whisper.cpp and a model may be configured later. "
-                        + "The original video is never modified."
+                "Managed components apply their paths automatically. Use this screen only to override them with "
+                        + "your own files or change the temporary folder. The original video is never modified."
         );
         explanation.setWrapText(true);
         explanation.getStyleClass().add("muted");
@@ -96,7 +98,7 @@ public final class SettingsDialog {
             }
             validate.setDisable(true);
             validationResult.setText("Checking tools…");
-            ApplicationSettings candidate = values(ffmpeg, ffprobe, whisper, model, temporaryDirectory);
+            ApplicationSettings candidate = values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory);
             Thread thread = Thread.startVirtualThread(() -> {
                 try {
                     ToolValidationReport report = toolValidator.validate(candidate,
@@ -122,7 +124,7 @@ public final class SettingsDialog {
         dialog.getDialogPane().setContent(content);
 
         dialog.setResultConverter(button -> button == SAVE
-                ? values(ffmpeg, ffprobe, whisper, model, temporaryDirectory)
+                ? values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory)
                 : null);
         dialog.setOnHidden(event -> {
             Thread thread = validationThread.get();
@@ -228,6 +230,7 @@ public final class SettingsDialog {
             TextField ffprobe,
             TextField whisper,
             TextField model,
+            TextField vadModel,
             TextField temporaryDirectory
     ) {
         return new ApplicationSettings(
@@ -236,6 +239,7 @@ public final class SettingsDialog {
                 ffprobe.getText(),
                 whisper.getText(),
                 model.getText(),
+                vadModel.getText(),
                 temporaryDirectory.getText()
         );
     }
