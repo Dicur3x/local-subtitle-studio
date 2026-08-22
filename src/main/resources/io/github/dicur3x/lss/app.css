@@ -1,0 +1,130 @@
+.root {
+    -fx-font-family: "Segoe UI", "Inter", sans-serif;
+    -fx-font-size: 14px;
+    -fx-text-fill: #e8ecf3;
+}
+
+.app-root {
+    -fx-background-color: linear-gradient(to bottom right, #111620, #181d29 65%, #121a25);
+}
+
+.brand {
+    -fx-text-fill: #8ba4ff;
+    -fx-font-size: 12px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 1.8px;
+}
+
+.heading {
+    -fx-text-fill: #f5f7fb;
+    -fx-font-size: 27px;
+    -fx-font-weight: 700;
+}
+
+.muted {
+    -fx-text-fill: #98a2b3;
+}
+
+.drop-zone {
+    -fx-background-color: rgba(35, 42, 56, 0.72);
+    -fx-background-radius: 18px;
+    -fx-border-color: #4b5870;
+    -fx-border-radius: 18px;
+    -fx-border-width: 1.5px;
+    -fx-border-style: segments(8, 7);
+    -fx-padding: 30px;
+}
+
+.drop-zone-active {
+    -fx-background-color: rgba(65, 83, 139, 0.45);
+    -fx-border-color: #8ba4ff;
+}
+
+.drop-icon {
+    -fx-text-fill: #8ba4ff;
+    -fx-font-size: 35px;
+    -fx-font-weight: 300;
+}
+
+.drop-title {
+    -fx-text-fill: #f0f3f8;
+    -fx-font-size: 20px;
+    -fx-font-weight: 700;
+}
+
+.primary-button,
+.quiet-button {
+    -fx-cursor: hand;
+    -fx-background-radius: 9px;
+    -fx-padding: 9px 18px;
+    -fx-font-weight: 700;
+}
+
+.primary-button {
+    -fx-background-color: #7792f4;
+    -fx-text-fill: #0d1424;
+}
+
+.primary-button:hover {
+    -fx-background-color: #91a7fb;
+}
+
+.quiet-button {
+    -fx-background-color: #2d3545;
+    -fx-text-fill: #dce2ee;
+}
+
+.details-card {
+    -fx-background-color: rgba(31, 38, 52, 0.92);
+    -fx-background-radius: 14px;
+    -fx-border-color: #30394b;
+    -fx-border-radius: 14px;
+}
+
+.file-name {
+    -fx-text-fill: #f3f5fa;
+    -fx-font-size: 17px;
+    -fx-font-weight: 700;
+}
+
+.field-label {
+    -fx-text-fill: #bcc5d6;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+.combo-box {
+    -fx-background-color: #141a24;
+    -fx-background-radius: 8px;
+    -fx-border-color: #3b465b;
+    -fx-border-radius: 8px;
+    -fx-padding: 3px;
+}
+
+.combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #e6eaf1;
+    -fx-padding: 8px;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #1a2130;
+    -fx-border-color: #46516a;
+}
+
+.combo-box-popup .list-cell:hover,
+.combo-box-popup .list-cell:selected {
+    -fx-background-color: #344263;
+}
+
+.progress-indicator {
+    -fx-progress-color: #8ba4ff;
+}
+
+.error-text {
+    -fx-text-fill: #ff9d9d;
+}
+
+.status-text {
+    -fx-text-fill: #bac4d6;
+}
