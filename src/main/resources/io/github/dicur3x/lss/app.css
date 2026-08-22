@@ -128,3 +128,51 @@
 .status-text {
     -fx-text-fill: #bac4d6;
 }
+
+.settings-dialog {
+    -fx-background-color: #181d29;
+}
+
+.settings-dialog .header-panel {
+    -fx-background-color: #202736;
+}
+
+.settings-dialog .header-panel .label,
+.settings-dialog .content.label,
+.settings-dialog .label {
+    -fx-text-fill: #e8ecf3;
+}
+
+.settings-dialog .text-field {
+    -fx-background-color: #111620;
+    -fx-background-radius: 7px;
+    -fx-border-color: #3b465b;
+    -fx-border-radius: 7px;
+    -fx-text-fill: #e8ecf3;
+    -fx-prompt-text-fill: #737e91;
+}
+
+.settings-dialog .button-bar .button {
+    -fx-background-color: #2d3545;
+    -fx-background-radius: 8px;
+    -fx-text-fill: #e8ecf3;
+    -fx-font-weight: 700;
+}
+
+.settings-dialog .button-bar .button:default {
+    -fx-background-color: #7792f4;
+    -fx-text-fill: #0d1424;
+}
+
+.validation-result {
+    -fx-font-family: "Consolas", monospace;
+    -fx-text-fill: #bac4d6;
+}
+
+.validation-success {
+    -fx-text-fill: #88d7a6;
+}
+
+.validation-warning {
+    -fx-text-fill: #ffc27a;
+}
