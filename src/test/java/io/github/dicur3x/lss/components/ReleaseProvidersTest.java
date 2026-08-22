@@ -19,7 +19,9 @@ class ReleaseProvidersTest {
         String checksum = "a".repeat(64);
         var client = new MetadataClient(Map.of(
                 FfmpegReleaseProvider.VERSION_URI, "9.0.1\n",
-                FfmpegReleaseProvider.CHECKSUM_URI, checksum + "  ffmpeg-release-essentials.zip\n"
+                FfmpegReleaseProvider.CHECKSUM_URI, checksum + "  ffmpeg-release-essentials.zip\n",
+                URI.create("https://raw.githubusercontent.com/FFmpeg/FFmpeg/n9.0.1/Changelog"),
+                "version 9.0.1:\n fix one\n fix two\n\nversion 9.0:\n- new feature\n"
         ));
 
         ComponentRelease release = new FfmpegReleaseProvider(client).latest(() -> false);
@@ -27,6 +29,8 @@ class ReleaseProvidersTest {
         assertEquals(ManagedComponent.FFMPEG, release.component());
         assertEquals("9.0.1", release.version());
         assertEquals(checksum, release.expectedSha256().orElseThrow());
+        assertTrue(release.releaseNotes().contains("fix two"));
+        assertTrue(!release.releaseNotes().contains("new feature"));
         assertTrue(release.sourceCodeUri().toString().endsWith("ffmpeg-9.0.1.tar.xz"));
     }
 
@@ -39,6 +43,7 @@ class ReleaseProvidersTest {
                   {"tag_name":"v1.9.3","draft":false,"prerelease":true,"assets":[]},
                   {"tag_name":"v1.9.2","draft":false,"prerelease":false,
                    "html_url":"https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.2",
+                   "body":"## What's Changed\\n* Fix VAD timestamps by @author",
                    "assets":[{"name":"whisper-bin-x64.zip",
                      "browser_download_url":"https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip",
                      "digest":"sha256:%s"}]}
@@ -52,6 +57,7 @@ class ReleaseProvidersTest {
         assertEquals(ManagedComponent.WHISPER_CPP, release.component());
         assertEquals("1.9.2", release.version());
         assertEquals(checksum, release.expectedSha256().orElseThrow());
+        assertTrue(release.releaseNotes().contains("Fix VAD timestamps"));
     }
 
     private static final class MetadataClient implements DownloadClient {

@@ -37,6 +37,7 @@ class ManagedComponentInstallerTest {
                 URI.create("https://downloads.example.test/ffmpeg.zip"),
                 Optional.of(checksum),
                 URI.create("https://ffmpeg.org/download.html"),
+                "Test release notes",
                 URI.create("https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz"),
                 "GPLv3 test build"
         );

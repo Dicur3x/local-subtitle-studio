@@ -10,6 +10,7 @@ public record ComponentRelease(
         URI downloadUri,
         Optional<String> expectedSha256,
         URI releaseNotesUri,
+        String releaseNotes,
         URI sourceCodeUri,
         String licenseSummary
 ) {
@@ -25,6 +26,7 @@ public record ComponentRelease(
             }
         });
         releaseNotesUri = requireHttps(releaseNotesUri, "releaseNotesUri");
+        releaseNotes = requireText(releaseNotes, "releaseNotes");
         sourceCodeUri = requireHttps(sourceCodeUri, "sourceCodeUri");
         licenseSummary = requireText(licenseSummary, "licenseSummary");
     }

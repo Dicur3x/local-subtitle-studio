@@ -8,6 +8,16 @@
     -fx-background-color: linear-gradient(to bottom right, #111620, #181d29 65%, #121a25);
 }
 
+.main-scroll,
+.main-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.main-scroll {
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
 .brand {
     -fx-text-fill: #8ba4ff;
     -fx-font-size: 12px;
@@ -203,4 +213,13 @@
 
 .components-dialog .progress-bar {
     -fx-accent: #8ba4ff;
+}
+
+.release-notes-dialog .text-area {
+    -fx-control-inner-background: #111620;
+    -fx-background-color: #111620;
+    -fx-text-fill: #e8ecf3;
+    -fx-highlight-fill: #536aa5;
+    -fx-highlight-text-fill: #ffffff;
+    -fx-font-family: "Segoe UI", sans-serif;
 }

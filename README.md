@@ -2,22 +2,25 @@
 
 Local Subtitle Studio is a desktop application for creating subtitles from video while keeping media on the user's computer. The first supported platform is Windows.
 
-> Status: early MVP development. The current build can install its local toolchain, inspect a video, let the user choose an audio track, and prepare that track for local transcription.
+> Status: early MVP development. The current build can install its local toolchain and create an experimental original-language SRT locally from a selected video audio track.
 
 ## Current features
 
 - Drag-and-drop or file picker for local video files.
 - Asynchronous media inspection, so the UI remains responsive.
 - Audio track details: language metadata, title, codec, channel layout, bitrate, and sample rate.
-- One-click recommended setup plus individual installation and manual update checks for FFmpeg/FFprobe and stable whisper.cpp releases.
+- One-click recommended setup plus a separate updater for FFmpeg/FFprobe and stable whisper.cpp releases that never changes the selected model.
+- Release-note text inside the application after a version check, with an optional link to the upstream source.
 - Fast, Balanced, and Maximum quality Whisper model profiles; each model installs together with Silero VAD.
 - HTTPS downloads, safe ZIP extraction, size limits, exact model checksums, and published component checksums when available.
 - Automatic activation of managed tools, with manual path overrides in Advanced settings.
 - Persistent paths for `ffmpeg`, `ffprobe`, `whisper-cli`, Whisper and VAD models, and temporary files.
 - Built-in tool-path validation from the Advanced settings dialog.
 - Extraction of the selected stream to temporary 16 kHz, mono, signed 16-bit PCM WAV.
-- Cancellation of active inspection and audio-preparation processes.
-- Automatic removal of prepared audio when it is replaced or the application closes.
+- Local whisper.cpp recognition with automatic language detection, Silero VAD, full token timestamps, and speech-boundary-aware subtitle timing.
+- UTF-8 SRT export beside the source video; an existing subtitle file is never overwritten.
+- Cancellation of active inspection, audio-preparation, and transcription processes.
+- Automatic removal of temporary recognition audio after the operation.
 
 No media is uploaded. Cloud services are not used by the current build.
 
@@ -27,7 +30,7 @@ No media is uploaded. Cloud services are not used by the current build.
 - Enough local disk space for the selected model (about 190 MB, 574 MB, or 3.1 GB) and temporary audio.
 - Windows 10/11 for the currently tested build. The code avoids Windows-only process invocation so Linux and macOS can be added later.
 
-FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. Existing executables on `PATH` or custom files chosen in **Advanced settings** remain supported. `whisper-cli` and the models are prepared for the transcription milestone but are not invoked by the current build yet.
+FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. Existing executables on `PATH` or custom files chosen in **Advanced settings** remain supported.
 
 ## Run
 
@@ -35,7 +38,9 @@ FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. E
 .\gradlew.bat run
 ```
 
-Open **Components** and choose **Set up recommended** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. The same screen also supports individual installation and update checks. The application never installs an update silently. Open **Advanced settings** only when you want to override a managed path or change the temporary directory.
+Open **Components** and choose **Set up recommended tools + model** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg + whisper.cpp** updates only those program components and preserves the selected model. Models remain separately selectable. The application never installs an update silently. Open **Advanced settings** only when you want to override a managed path or change the temporary directory.
+
+After choosing a video and audio track, press **Create original SRT**. The language is detected automatically and the result is saved beside the video as `<video>.<language>.srt`. If that name already exists, a numbered file is created instead.
 
 On Windows, settings and managed downloads are stored below `%LOCALAPPDATA%\LocalSubtitleStudio`. They are kept outside the project and are not committed to Git. A cancelled or failed download is never activated.
 
@@ -51,7 +56,7 @@ The larger WAV is short-lived working data. It is deleted when another track or 
 
 Whisper model files are immutable weights rather than applications with regular releases and changelogs. Local Subtitle Studio identifies each catalog entry by its exact filename, byte size, and SHA-256 checksum. When the recommended catalog profile changes, the Components screen can present the new profile; whisper.cpp itself has conventional release notes available from that screen.
 
-Silero VAD is installed with every managed model. It identifies speech boundaries and avoids sending long silent spans to recognition. This is one part of preventing a subtitle from staying visible until the next sentence. The transcription milestone will also clamp cue endings against detected speech and word timestamps; changing to a larger recognition model alone cannot reliably correct that timing problem.
+Silero VAD is installed with every managed model. It identifies speech boundaries and avoids sending long silent spans to recognition. Recognition requests full token timestamps from whisper.cpp, and the timing optimizer adds only a short tail after the last recognized word while keeping a gap before the next speech segment. This prevents a cue from being extended merely to meet the next sentence; changing to a larger recognition model alone cannot reliably correct timing.
 
 ## Test
 
@@ -69,13 +74,13 @@ End-to-end media probe test (requires both `ffmpeg` and `ffprobe`):
 
 ## Architecture
 
-The MVP intentionally starts as one Gradle module. Packages and interfaces separate UI, settings, media inspection, audio preparation, and external-process infrastructure. See [`docs/architecture/0001-foundation.md`](docs/architecture/0001-foundation.md) and [`docs/architecture/0002-external-tools-and-audio.md`](docs/architecture/0002-external-tools-and-audio.md).
+The MVP intentionally starts as one Gradle module. Packages and interfaces separate UI, settings, media inspection, audio preparation, and external-process infrastructure. See the decisions in [`docs/architecture`](docs/architecture), including the [managed-component policy](docs/architecture/0003-managed-components-and-models.md) and [original SRT pipeline](docs/architecture/0004-original-srt-pipeline.md).
 
-Planned pipeline:
+Current original-subtitle pipeline:
 
 ```text
-video → audio track → PCM audio → speech detection → transcription
-      → timing/segmentation → validation → SRT
+video → audio track → temporary PCM → Silero VAD → whisper.cpp full JSON
+      → word-aware timing → two-line formatting → non-overwriting SRT
 ```
 
 ## Licensing

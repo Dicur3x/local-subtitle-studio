@@ -46,6 +46,7 @@ public final class WhisperReleaseProvider implements ComponentReleaseProvider {
                             asset.get(),
                             checksum,
                             URI.create(release.path("html_url").asText()),
+                            releaseNotes(release, tag),
                             URI.create("https://github.com/ggml-org/whisper.cpp/archive/refs/tags/" + tag + ".tar.gz"),
                             "MIT License"
                     );
@@ -61,6 +62,13 @@ public final class WhisperReleaseProvider implements ComponentReleaseProvider {
             throw new ComponentException("Could not check the latest whisper.cpp version: "
                     + exception.getMessage(), exception);
         }
+    }
+
+    private static String releaseNotes(JsonNode release, String tag) {
+        String body = release.path("body").asText().strip();
+        return body.isEmpty()
+                ? "whisper.cpp " + tag + " is a stable release. Detailed notes were not published with this release."
+                : body;
     }
 
     private static Optional<URI> findAsset(JsonNode release) {

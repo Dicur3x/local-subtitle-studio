@@ -14,6 +14,7 @@ public final class FfmpegReleaseProvider implements ComponentReleaseProvider {
             "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip");
 
     private static final long METADATA_LIMIT = 4096;
+    private static final long CHANGELOG_LIMIT = 3L * 1024 * 1024;
     private final DownloadClient downloadClient;
 
     public FfmpegReleaseProvider(DownloadClient downloadClient) {
@@ -33,12 +34,16 @@ public final class FfmpegReleaseProvider implements ComponentReleaseProvider {
             if (!checksum.matches("[0-9a-f]{64}")) {
                 throw new ComponentException("The FFmpeg release source returned an invalid SHA-256 checksum.");
             }
+            URI changelogUri = URI.create(
+                    "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n" + version + "/Changelog");
+            String releaseNotes = loadReleaseNotes(version, changelogUri, cancellationRequested);
             return new ComponentRelease(
                     ManagedComponent.FFMPEG,
                     version,
                     DOWNLOAD_URI,
                     Optional.of(checksum),
-                    URI.create("https://ffmpeg.org/download.html"),
+                    URI.create("https://github.com/FFmpeg/FFmpeg/blob/n" + version + "/Changelog"),
+                    releaseNotes,
                     URI.create("https://ffmpeg.org/releases/ffmpeg-" + version + ".tar.xz"),
                     "GPLv3 Windows essentials build from gyan.dev"
             );
@@ -51,6 +56,43 @@ public final class FfmpegReleaseProvider implements ComponentReleaseProvider {
             throw new ComponentException("Could not check the latest FFmpeg version: "
                     + exception.getMessage(), exception);
         }
+    }
+
+    private String loadReleaseNotes(
+            String version,
+            URI changelogUri,
+            BooleanSupplier cancellationRequested
+    ) throws InterruptedException {
+        try {
+            String changelog = downloadClient.getText(
+                    changelogUri, CHANGELOG_LIMIT, cancellationRequested);
+            String section = versionSection(changelog, version);
+            if (!section.isBlank()) {
+                return section;
+            }
+        } catch (IOException ignored) {
+            // Version and package checks remain useful when the optional changelog host is unavailable.
+        }
+        return "FFmpeg " + version + " is a stable point release. FFmpeg states that point releases "
+                + "contain important bug fixes rather than new features. Detailed release notes are temporarily "
+                + "unavailable; use the official-source button to view the upstream changelog.";
+    }
+
+    static String versionSection(String changelog, String version) {
+        String normalized = changelog == null ? "" : changelog.replace("\r\n", "\n");
+        String heading = "version " + version + ":";
+        int start = normalized.indexOf(heading);
+        if (start < 0) {
+            return "";
+        }
+        int searchFrom = start + heading.length();
+        java.util.regex.Matcher next = java.util.regex.Pattern.compile("(?m)^version [^:\\r\\n]+:")
+                .matcher(normalized);
+        int end = normalized.length();
+        if (next.find(searchFrom)) {
+            end = next.start();
+        }
+        return normalized.substring(start, end).strip();
     }
 
     private static String firstToken(String value) throws ComponentException {

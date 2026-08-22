@@ -20,6 +20,8 @@ import io.github.dicur3x.lss.settings.JsonSettingsRepository;
 import io.github.dicur3x.lss.settings.SettingsException;
 import io.github.dicur3x.lss.settings.SettingsManager;
 import io.github.dicur3x.lss.settings.SettingsPaths;
+import io.github.dicur3x.lss.subtitles.SubtitleCreationService;
+import io.github.dicur3x.lss.subtitles.WhisperSubtitleCreationService;
 import io.github.dicur3x.lss.ui.MainView;
 import io.github.dicur3x.lss.ui.ComponentsDialog;
 import io.github.dicur3x.lss.ui.SettingsDialog;
@@ -64,7 +66,10 @@ public final class LocalSubtitleStudioApplication extends Application {
                         settingsManager.current().temporaryDirectory(),
                         processRunner
                 ).extract(file, streamIndex, cancellationRequested);
-        mainView = new MainView(mediaProbe, audioExtractor, this::showComponents, this::showSettings);
+        SubtitleCreationService subtitleCreationService = new WhisperSubtitleCreationService(
+                settingsManager::current, processRunner, new ObjectMapper());
+        mainView = new MainView(
+                mediaProbe, audioExtractor, subtitleCreationService, this::showComponents, this::showSettings);
 
         Scene scene = new Scene(mainView.root(), 920, 690);
         scene.getStylesheets().add(Objects.requireNonNull(

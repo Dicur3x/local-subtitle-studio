@@ -19,6 +19,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -43,8 +44,9 @@ public final class ComponentsDialog {
     private final Map<ManagedComponent, Boolean> installAvailable = new EnumMap<>(ManagedComponent.class);
     private final AtomicReference<Thread> activeThread = new AtomicReference<>();
     private final AtomicBoolean closed = new AtomicBoolean();
-    private final Button checkUpdates = new Button("Check for updates");
-    private final Button setupRecommended = new Button("Set up recommended (~700 MB)");
+    private final Button checkUpdates = new Button("Check versions");
+    private final Button updateComponents = new Button("Update FFmpeg + whisper.cpp");
+    private final Button setupRecommended = new Button("Set up recommended tools + model (~700 MB)");
     private final Button cancel = new Button("Cancel download");
     private final ProgressBar progressBar = new ProgressBar(0);
     private final Label operationStatus = new Label("No network check has been made yet.");
@@ -86,6 +88,8 @@ public final class ComponentsDialog {
 
         setupRecommended.getStyleClass().add("primary-button");
         setupRecommended.setOnAction(event -> setupRecommended());
+        updateComponents.getStyleClass().add("quiet-button");
+        updateComponents.setOnAction(event -> updateComponents());
         checkUpdates.getStyleClass().add("quiet-button");
         checkUpdates.setOnAction(event -> checkAllComponents());
         cancel.getStyleClass().add("quiet-button");
@@ -98,7 +102,8 @@ public final class ComponentsDialog {
         operationStatus.setWrapText(true);
         operationStatus.getStyleClass().add("muted");
 
-        HBox componentActions = new HBox(10, setupRecommended, checkUpdates, cancel);
+        FlowPane componentActions = new FlowPane(10, 10,
+                setupRecommended, updateComponents, checkUpdates, cancel);
         componentActions.setAlignment(Pos.CENTER_LEFT);
         VBox downloadState = new VBox(8, componentActions, progressBar, operationStatus);
 
@@ -141,7 +146,8 @@ public final class ComponentsDialog {
         notes.getStyleClass().add("quiet-button");
         notes.setDisable(true);
         notes.setOnAction(event -> Optional.ofNullable(latestReleases.get(component))
-                .ifPresent(release -> openLink.accept(release.releaseNotesUri().toString())));
+                .ifPresent(release -> new ReleaseNotesDialog(openLink).showAndWait(
+                        notes.getScene().getWindow(), release)));
         install.setOnAction(event -> installComponent(component));
 
         HBox heading = new HBox(12, title, spacer(), install, notes);
@@ -320,6 +326,55 @@ public final class ComponentsDialog {
         );
     }
 
+    private void updateComponents() {
+        runTask(
+                "Checking and updating FFmpeg and whisper.cpp…",
+                () -> {
+                    Map<ManagedComponent, ComponentCheck> checks = new EnumMap<>(ManagedComponent.class);
+                    Map<ManagedComponent, InstalledComponent> installed = new EnumMap<>(ManagedComponent.class);
+                    Map<ManagedComponent, String> errors = new EnumMap<>(ManagedComponent.class);
+                    for (ManagedComponent component : ManagedComponent.values()) {
+                        try {
+                            ComponentCheck check = toolsService.check(
+                                    component, Thread.currentThread()::isInterrupted);
+                            checks.put(component, check);
+                            if (check.updateAvailable()) {
+                                installed.put(component, toolsService.install(
+                                        check.latestRelease(), progressListener(),
+                                        Thread.currentThread()::isInterrupted));
+                            }
+                        } catch (CancellationException exception) {
+                            throw exception;
+                        } catch (Exception exception) {
+                            errors.put(component, exception.getMessage() == null
+                                    ? "Update failed." : exception.getMessage());
+                        }
+                    }
+                    return new ComponentUpdateResult(checks, installed, errors);
+                },
+                result -> {
+                    result.checks().forEach((component, check) -> {
+                        latestReleases.put(component, check.latestRelease());
+                        renderCheck(check);
+                    });
+                    result.components().forEach((component, installed) -> {
+                        rows.get(component).status().setText("Managed version " + installed.version()
+                                + " is installed and active.");
+                        installAvailable.put(component, false);
+                    });
+                    result.errors().forEach((component, message) -> rows.get(component).status().setText(message));
+                    if (!result.errors().isEmpty()) {
+                        operationStatus.setText("Some program components could not be updated. The model was not changed.");
+                        operationStatus.getStyleClass().add("validation-warning");
+                    } else if (result.components().isEmpty()) {
+                        operationStatus.setText("FFmpeg and whisper.cpp are already current. The model was not changed.");
+                    } else {
+                        operationStatus.setText("Program components updated. The selected model was not changed.");
+                    }
+                }
+        );
+    }
+
     private void installSelectedModel() {
         WhisperModelProfile profile = modelProfiles.getValue();
         if (profile == null) {
@@ -418,6 +473,7 @@ public final class ComponentsDialog {
 
     private void setBusy(boolean busy) {
         setupRecommended.setDisable(busy);
+        updateComponents.setDisable(busy);
         checkUpdates.setDisable(busy);
         rows.forEach((component, row) -> {
             row.install().setDisable(busy || !Boolean.TRUE.equals(installAvailable.get(component)));
@@ -469,6 +525,18 @@ public final class ComponentsDialog {
         private SetupResult {
             components = Map.copyOf(components);
             Objects.requireNonNull(model, "model");
+        }
+    }
+
+    private record ComponentUpdateResult(
+            Map<ManagedComponent, ComponentCheck> checks,
+            Map<ManagedComponent, InstalledComponent> components,
+            Map<ManagedComponent, String> errors
+    ) {
+        private ComponentUpdateResult {
+            checks = Map.copyOf(checks);
+            components = Map.copyOf(components);
+            errors = Map.copyOf(errors);
         }
     }
 }
