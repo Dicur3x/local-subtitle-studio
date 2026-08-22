@@ -1,5 +1,7 @@
 package io.github.dicur3x.lss.subtitles;
 
+import io.github.dicur3x.lss.settings.SubtitlePreferences;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,6 +22,15 @@ public final class SubtitleTimingOptimizer {
     public SubtitleTimingOptimizer() {
         this(DEFAULT_START_PADDING, DEFAULT_END_PADDING,
                 DEFAULT_MINIMUM_DURATION, DEFAULT_NEXT_SPEECH_GAP);
+    }
+
+    public SubtitleTimingOptimizer(SubtitlePreferences preferences) {
+        this(
+                Duration.ofMillis(Objects.requireNonNull(preferences, "preferences").startPaddingMs()),
+                Duration.ofMillis(preferences.endPaddingMs()),
+                Duration.ofMillis(preferences.minimumDurationMs()),
+                Duration.ofMillis(preferences.nextSpeechGapMs())
+        );
     }
 
     public SubtitleTimingOptimizer(

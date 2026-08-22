@@ -49,6 +49,7 @@ public final class ComponentsDialog {
     private final Button setupRecommended = new Button("Set up recommended tools + model (~700 MB)");
     private final Button cancel = new Button("Cancel download");
     private final ProgressBar progressBar = new ProgressBar(0);
+    private final Label operationPercent = new Label();
     private final Label operationStatus = new Label("No network check has been made yet.");
     private final ComboBox<WhisperModelProfile> modelProfiles = new ComboBox<>();
     private final Label modelDescription = new Label();
@@ -99,13 +100,19 @@ public final class ComponentsDialog {
         progressBar.setMaxWidth(Double.MAX_VALUE);
         progressBar.setVisible(false);
         progressBar.setManaged(false);
+        operationPercent.getStyleClass().add("progress-percentage");
+        operationPercent.setVisible(false);
+        operationPercent.setManaged(false);
         operationStatus.setWrapText(true);
         operationStatus.getStyleClass().add("muted");
 
         FlowPane componentActions = new FlowPane(10, 10,
                 setupRecommended, updateComponents, checkUpdates, cancel);
         componentActions.setAlignment(Pos.CENTER_LEFT);
-        VBox downloadState = new VBox(8, componentActions, progressBar, operationStatus);
+        HBox progressRow = new HBox(10, progressBar, operationPercent);
+        progressRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(progressBar, Priority.ALWAYS);
+        VBox downloadState = new VBox(8, componentActions, progressRow, operationStatus);
 
         VBox modelCard = createModelCard();
         VBox content = new VBox(18, explanation, components, downloadState, modelCard);
@@ -417,6 +424,9 @@ public final class ComponentsDialog {
                 return;
             }
             progressBar.setProgress(total > 0 ? Math.min(1d, completed / (double) total) : -1d);
+            operationPercent.setText(total > 0
+                    ? Math.min(100, Math.max(0, Math.round(completed * 100f / total))) + "%"
+                    : "Working…");
             operationStatus.setText(total > 0
                     ? phase + " · " + formatSize(completed) + " / " + formatSize(total)
                     : phase + " · " + formatSize(completed));
@@ -460,6 +470,7 @@ public final class ComponentsDialog {
         setBusy(true);
         operationStatus.setText(startingMessage);
         progressBar.setProgress(-1);
+        operationPercent.setText("Working…");
         thread.start();
     }
 
@@ -489,6 +500,8 @@ public final class ComponentsDialog {
         cancel.setManaged(busy);
         progressBar.setVisible(busy);
         progressBar.setManaged(busy);
+        operationPercent.setVisible(busy);
+        operationPercent.setManaged(busy);
     }
 
     private static Region spacer() {

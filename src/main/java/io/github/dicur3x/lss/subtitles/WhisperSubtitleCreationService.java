@@ -25,37 +25,23 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
     private final Supplier<ApplicationSettings> settingsSupplier;
     private final ExternalProcessRunner processRunner;
     private final ObjectMapper objectMapper;
-    private final SubtitleTimingOptimizer timingOptimizer;
-    private final SrtWriter srtWriter;
-
     public WhisperSubtitleCreationService(
             Supplier<ApplicationSettings> settingsSupplier,
             ExternalProcessRunner processRunner,
             ObjectMapper objectMapper
     ) {
-        this(settingsSupplier, processRunner, objectMapper, new SubtitleTimingOptimizer(), new SrtWriter());
-    }
-
-    WhisperSubtitleCreationService(
-            Supplier<ApplicationSettings> settingsSupplier,
-            ExternalProcessRunner processRunner,
-            ObjectMapper objectMapper,
-            SubtitleTimingOptimizer timingOptimizer,
-            SrtWriter srtWriter
-    ) {
         this.settingsSupplier = Objects.requireNonNull(settingsSupplier, "settingsSupplier");
         this.processRunner = Objects.requireNonNull(processRunner, "processRunner");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.timingOptimizer = Objects.requireNonNull(timingOptimizer, "timingOptimizer");
-        this.srtWriter = Objects.requireNonNull(srtWriter, "srtWriter");
     }
 
     @Override
     public CreatedSubtitles create(
             Path mediaFile,
             int audioStreamIndex,
+            String spokenLanguage,
             BooleanSupplier cancellationRequested,
-            Consumer<String> progress
+            Consumer<PipelineProgress> progress
     ) throws SubtitleCreationException {
         Objects.requireNonNull(cancellationRequested, "cancellationRequested");
         Objects.requireNonNull(progress, "progress");
@@ -67,26 +53,53 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
             }
             Path whisperModel = requiredModel(settings.whisperModel(), "Whisper model");
             Path vadModel = requiredModel(settings.whisperVadModel(), "voice detection model");
-            progress.accept("Preparing speech-recognition audio…");
+            progress.accept(PipelineProgress.at(
+                    PipelineStage.PREPARING_AUDIO, 0, "Preparing speech-recognition audio…"));
             FfmpegAudioExtractor extractor = new FfmpegAudioExtractor(
                     settings.ffmpegExecutable(), settings.temporaryDirectory(), processRunner);
             PreparedAudio audio = extractor.extract(mediaFile, audioStreamIndex, cancellationRequested);
             try {
                 throwIfCancelled(cancellationRequested);
-                progress.accept("Recognizing speech locally with whisper.cpp…");
+                progress.accept(PipelineProgress.at(
+                        PipelineStage.PREPARING_AUDIO, 100, "Audio is ready"));
+                progress.accept(PipelineProgress.at(
+                        PipelineStage.TRANSCRIBING, 0, "Recognizing speech locally with whisper.cpp…"));
                 WhisperCppTranscriber transcriber = new WhisperCppTranscriber(
                         settings.whisperExecutable(), whisperModel, vadModel, processRunner,
                         new WhisperJsonParser(objectMapper));
-                TranscriptionResult result = transcriber.transcribe(audio.file(), cancellationRequested);
+                TranscriptionResult result = transcriber.transcribe(
+                        audio.file(), spokenLanguage, cancellationRequested,
+                        percent -> progress.accept(PipelineProgress.at(
+                                PipelineStage.TRANSCRIBING, percent,
+                                "Recognizing speech locally with whisper.cpp…")));
                 throwIfCancelled(cancellationRequested);
                 if (result.segments().isEmpty()) {
                     throw new SubtitleCreationException(
                             "No speech was recognized. Try another audio track or a higher-quality model.");
                 }
-                progress.accept("Optimizing subtitle timing…");
-                List<SubtitleCue> cues = timingOptimizer.optimize(result.segments());
+                progress.accept(PipelineProgress.at(
+                        PipelineStage.OPTIMIZING, 0, "Optimizing subtitle timing…"));
+                SubtitleSegmenter segmenter = new SubtitleSegmenter(settings.subtitlePreferences());
+                SubtitleTimingOptimizer timingOptimizer = new SubtitleTimingOptimizer(
+                        settings.subtitlePreferences());
+                List<RecognizedSegment> segmented = segmenter.segment(result.segments());
+                List<SubtitleCue> cues = timingOptimizer.optimize(segmented);
+                progress.accept(PipelineProgress.at(
+                        PipelineStage.OPTIMIZING, 100, "Subtitle timing is ready"));
+                progress.accept(PipelineProgress.at(
+                        PipelineStage.VALIDATING, 0, "Checking subtitle readability and timing…"));
+                SubtitleValidationReport validation = new SubtitleValidator(
+                        settings.subtitlePreferences()).validate(cues);
+                progress.accept(PipelineProgress.at(
+                        PipelineStage.VALIDATING, 100, validation.passedWithoutWarnings()
+                                ? "Subtitle checks passed" : "Subtitle checks completed with warnings"));
+                progress.accept(PipelineProgress.at(
+                        PipelineStage.WRITING, 0, "Saving SRT beside the video…"));
+                SrtWriter srtWriter = new SrtWriter(settings.subtitlePreferences());
                 Path output = srtWriter.write(mediaFile, result.language(), cues);
-                return new CreatedSubtitles(output, result.language(), cues.size());
+                progress.accept(PipelineProgress.complete("Original subtitles are ready"));
+                return new CreatedSubtitles(
+                        output, result.language(), cues.size(), validation.warnings());
             } finally {
                 try {
                     audio.close();

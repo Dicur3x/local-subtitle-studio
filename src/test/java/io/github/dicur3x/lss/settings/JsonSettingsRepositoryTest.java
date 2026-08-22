@@ -33,7 +33,8 @@ class JsonSettingsRepositoryTest {
                 "",
                 "",
                 "",
-                "C:\\Temp"
+                "C:\\Temp",
+                SubtitlePreferences.defaults()
         );
 
         repository.save(settings);
@@ -43,5 +44,24 @@ class JsonSettingsRepositoryTest {
         try (var files = Files.list(settingsFile.getParent())) {
             assertEquals(1, files.count(), "temporary settings file was left behind");
         }
+    }
+
+    @Test
+    void suppliesSubtitleDefaultsWhenLoadingVersionTwoSettings() throws Exception {
+        Path settingsFile = tempDirectory.resolve("settings.json");
+        Files.writeString(settingsFile, """
+                {
+                  "schemaVersion": 2,
+                  "ffmpegExecutable": "ffmpeg",
+                  "ffprobeExecutable": "ffprobe",
+                  "temporaryDirectory": ""
+                }
+                """);
+        var repository = new JsonSettingsRepository(settingsFile, new ObjectMapper());
+
+        ApplicationSettings loaded = repository.load().orElseThrow();
+
+        assertEquals(42, loaded.subtitlePreferences().maximumCharactersPerLine());
+        assertEquals(2, loaded.subtitlePreferences().maximumLines());
     }
 }

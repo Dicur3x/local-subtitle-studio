@@ -10,9 +10,10 @@ public record ApplicationSettings(
         String whisperExecutable,
         String whisperModel,
         String whisperVadModel,
-        String temporaryDirectory
+        String temporaryDirectory,
+        SubtitlePreferences subtitlePreferences
 ) {
-    public static final int CURRENT_SCHEMA_VERSION = 2;
+    public static final int CURRENT_SCHEMA_VERSION = 3;
 
     public ApplicationSettings {
         schemaVersion = schemaVersion <= 0 ? CURRENT_SCHEMA_VERSION : schemaVersion;
@@ -22,6 +23,7 @@ public record ApplicationSettings(
         whisperModel = normalize(whisperModel);
         whisperVadModel = normalize(whisperVadModel);
         temporaryDirectory = normalize(temporaryDirectory);
+        subtitlePreferences = subtitlePreferences == null ? SubtitlePreferences.defaults() : subtitlePreferences;
     }
 
     public static ApplicationSettings defaults() {
@@ -32,23 +34,24 @@ public record ApplicationSettings(
                 configuredValue("lss.whisper.path", "LSS_WHISPER_PATH", ""),
                 configuredValue("lss.whisper.model", "LSS_WHISPER_MODEL", ""),
                 configuredValue("lss.whisper.vad.model", "LSS_WHISPER_VAD_MODEL", ""),
-                configuredValue("lss.temp.path", "LSS_TEMP_PATH", "")
+                configuredValue("lss.temp.path", "LSS_TEMP_PATH", ""),
+                SubtitlePreferences.defaults()
         );
     }
 
     public ApplicationSettings withManagedFfmpeg(String ffmpeg, String ffprobe) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpeg, ffprobe, whisperExecutable,
-                whisperModel, whisperVadModel, temporaryDirectory);
+                whisperModel, whisperVadModel, temporaryDirectory, subtitlePreferences);
     }
 
     public ApplicationSettings withManagedWhisper(String whisper) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable, whisper,
-                whisperModel, whisperVadModel, temporaryDirectory);
+                whisperModel, whisperVadModel, temporaryDirectory, subtitlePreferences);
     }
 
     public ApplicationSettings withManagedModels(String model, String vadModel) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable,
-                whisperExecutable, model, vadModel, temporaryDirectory);
+                whisperExecutable, model, vadModel, temporaryDirectory, subtitlePreferences);
     }
 
     private static String configuredValue(String property, String environmentVariable, String fallback) {

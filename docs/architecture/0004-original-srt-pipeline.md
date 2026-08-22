@@ -8,11 +8,12 @@
 Create an original-language SRT through one user action after a video and audio track are selected. The application:
 
 1. decodes the selected stream to temporary 16 kHz mono PCM;
-2. invokes the configured `whisper-cli` with automatic language detection, Silero VAD, word splitting, and full JSON output;
+2. invokes the configured `whisper-cli` with automatic or manually selected spoken language, Silero VAD, word splitting, full JSON output, and its progress callback enabled;
 3. derives speech bounds from usable token offsets, falling back to segment offsets;
-4. adds a 50 ms lead and a 200 ms tail, preserves an 800 ms minimum display time when the next phrase permits it, and leaves 100 ms before the next detected speech;
-5. writes a UTF-8 SRT beside the video without replacing an existing file;
-6. removes the temporary audio and transcription JSON.
+4. splits long utterances at token boundaries and adds a 50 ms lead and a 200 ms tail, preserves an 800 ms minimum display time when the next phrase permits it, and leaves 100 ms before the next detected speech;
+5. validates cue ordering, overlaps, configured line limits, reading speed, and adjacent repeated text;
+6. writes a UTF-8 SRT beside the video without replacing an existing file;
+7. removes the temporary audio and transcription JSON.
 
 The model, VAD, and executable are validated before decoding begins. Recognition and FFmpeg both use the shared cancellable external-process boundary and never invoke a shell.
 
@@ -20,7 +21,9 @@ The model, VAD, and executable are validated before decoding begins. Recognition
 
 A subtitle must not remain visible only because another subtitle begins much later. Its normal end is therefore based on the last recognized token plus a small reading tail, not the next segment's start. The following speech boundary is a maximum limit rather than the source of the end timestamp.
 
-`--max-len 84` and word-aware splitting keep generated cues suitable for at most two display lines. The SRT writer balances text around 42 characters; later editing and validation milestones may split difficult long utterances more aggressively.
+`--max-len 84` provides an initial hint to whisper.cpp. The application also owns the final segmentation step, preserves token boundaries when splitting, and balances the configured number of lines. Readability and timing defaults can be adjusted in Advanced settings without changing component paths.
+
+The UI maps the engine's 0–100 recognition progress into an overall five-stage bar: audio preparation, recognition, timing, validation, and SRT writing. Operations that do not expose a meaningful total remain indeterminate instead of presenting a fabricated percentage.
 
 ## Output policy
 
@@ -29,6 +32,7 @@ The detected language becomes part of the filename, for example `film.ru.srt`. I
 ## Consequences
 
 - The application now has a complete experimental original-subtitle vertical slice.
+- Long cues and structural timing errors are handled before the file is written; non-fatal readability warnings are shown after completion.
 - Recognition remains fully local after components and models have been downloaded.
 - Accuracy and speed depend on the chosen model and computer.
 - The current MVP does not yet provide an editor, translation, speaker labels, or human review workflow.

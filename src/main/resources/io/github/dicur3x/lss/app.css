@@ -127,12 +127,36 @@
     -fx-background-color: #344263;
 }
 
-.progress-indicator {
-    -fx-progress-color: #8ba4ff;
+.progress-bar {
+    -fx-accent: #8ba4ff;
+}
+
+.progress-bar > .track {
+    -fx-background-color: #242d3d;
+    -fx-background-radius: 5px;
+}
+
+.progress-bar > .bar {
+    -fx-background-radius: 5px;
+    -fx-background-insets: 0;
+}
+
+.progress-percentage {
+    -fx-text-fill: #dce4ff;
+    -fx-font-weight: 800;
+}
+
+.pipeline-stages {
+    -fx-text-fill: #8f9bb0;
+    -fx-font-size: 12px;
 }
 
 .error-text {
     -fx-text-fill: #ff9d9d;
+}
+
+.warning-text {
+    -fx-text-fill: #ffc27a;
 }
 
 .status-text {
@@ -160,6 +184,28 @@
     -fx-border-radius: 7px;
     -fx-text-fill: #e8ecf3;
     -fx-prompt-text-fill: #737e91;
+}
+
+.settings-dialog .spinner {
+    -fx-background-color: #111620;
+    -fx-border-color: #3b465b;
+    -fx-border-radius: 7px;
+}
+
+.settings-dialog .spinner .text-field {
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+}
+
+.settings-dialog .spinner .increment-arrow-button,
+.settings-dialog .spinner .decrement-arrow-button {
+    -fx-background-color: #2d3545;
+}
+
+.section-title {
+    -fx-text-fill: #f3f5fa;
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
 }
 
 .settings-dialog .button-bar .button {

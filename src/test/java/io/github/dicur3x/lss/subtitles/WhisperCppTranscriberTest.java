@@ -41,12 +41,14 @@ class WhisperCppTranscriberTest {
                 },
                 new WhisperJsonParser(new ObjectMapper()));
 
-        TranscriptionResult result = transcriber.transcribe(audio, () -> false);
+        TranscriptionResult result = transcriber.transcribe(audio, "ru", () -> false, percent -> { });
 
         assertEquals("en", result.language());
         assertEquals(1, result.segments().size());
         List<String> command = invoked.get();
         assertTrue(command.contains("--output-json-full"));
+        assertEquals("ru", command.get(command.indexOf("--language") + 1));
+        assertTrue(command.contains("--print-progress"));
         assertTrue(command.contains("--split-on-word"));
         assertTrue(command.contains("--vad"));
         assertTrue(command.contains("--vad-model"));

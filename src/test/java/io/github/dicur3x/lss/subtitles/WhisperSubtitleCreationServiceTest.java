@@ -3,6 +3,7 @@ package io.github.dicur3x.lss.subtitles;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.dicur3x.lss.infrastructure.process.ProcessResult;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
+import io.github.dicur3x.lss.settings.SubtitlePreferences;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -28,7 +29,7 @@ class WhisperSubtitleCreationServiceTest {
         ApplicationSettings settings = new ApplicationSettings(
                 ApplicationSettings.CURRENT_SCHEMA_VERSION,
                 "ffmpeg-test", "ffprobe-test", "whisper-test",
-                model.toString(), vad.toString(), workingRoot.toString());
+                model.toString(), vad.toString(), workingRoot.toString(), SubtitlePreferences.defaults());
         List<List<String>> commands = new ArrayList<>();
 
         WhisperSubtitleCreationService service = new WhisperSubtitleCreationService(
@@ -53,19 +54,21 @@ class WhisperSubtitleCreationServiceTest {
                 },
                 new ObjectMapper());
 
-        List<String> progress = new ArrayList<>();
+        List<PipelineProgress> progress = new ArrayList<>();
         CreatedSubtitles created = service.create(video, 3, () -> false, progress::add);
 
         assertEquals("episode.ru.srt", created.file().getFileName().toString());
         assertEquals("ru", created.language());
         assertEquals(1, created.cueCount());
         assertTrue(Files.readString(created.file()).contains("00:00:01,050 --> 00:00:02,000"));
-        assertEquals(List.of(
-                "Preparing speech-recognition audio…",
-                "Recognizing speech locally with whisper.cpp…",
-                "Optimizing subtitle timing…"), progress);
+        assertEquals(PipelineStage.PREPARING_AUDIO, progress.getFirst().stage());
+        assertEquals(PipelineStage.COMPLETE, progress.getLast().stage());
+        assertEquals(100, progress.getLast().overallPercent());
+        assertTrue(progress.stream().anyMatch(value -> value.stage() == PipelineStage.TRANSCRIBING));
+        assertTrue(progress.stream().anyMatch(value -> value.stage() == PipelineStage.VALIDATING));
         assertEquals(2, commands.size());
         assertTrue(commands.getFirst().contains("0:3"));
+        assertEquals("auto", commands.getLast().get(commands.getLast().indexOf("--language") + 1));
         try (var children = Files.list(workingRoot)) {
             assertFalse(children.findAny().isPresent());
         }

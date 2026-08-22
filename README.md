@@ -10,6 +10,7 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - Asynchronous media inspection, so the UI remains responsive.
 - Audio track details: language metadata, title, codec, channel layout, bitrate, and sample rate.
 - One-click recommended setup plus a separate updater for FFmpeg/FFprobe and stable whisper.cpp releases that never changes the selected model.
+- Download progress bars with transferred sizes and exact percentages when the source reports a total size.
 - Release-note text inside the application after a version check, with an optional link to the upstream source.
 - Fast, Balanced, and Maximum quality Whisper model profiles; each model installs together with Silero VAD.
 - HTTPS downloads, safe ZIP extraction, size limits, exact model checksums, and published component checksums when available.
@@ -17,7 +18,10 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - Persistent paths for `ffmpeg`, `ffprobe`, `whisper-cli`, Whisper and VAD models, and temporary files.
 - Built-in tool-path validation from the Advanced settings dialog.
 - Extraction of the selected stream to temporary 16 kHz, mono, signed 16-bit PCM WAV.
-- Local whisper.cpp recognition with automatic language detection, Silero VAD, full token timestamps, and speech-boundary-aware subtitle timing.
+- Local whisper.cpp recognition with automatic language detection or a manual choice from all 100 supported languages, Silero VAD, full token timestamps, and speech-boundary-aware subtitle timing.
+- A five-stage creation progress bar with the real percentage reported by whisper.cpp during recognition.
+- Word-timestamp-aware splitting of long utterances, balanced line wrapping, and validation for overlaps, repeated text, line length, line count, and reading speed.
+- Configurable readability and timing limits in Advanced settings, with safe defaults and automatic migration of older settings files.
 - UTF-8 SRT export beside the source video; an existing subtitle file is never overwritten.
 - Cancellation of active inspection, audio-preparation, and transcription processes.
 - Automatic removal of temporary recognition audio after the operation.
@@ -40,7 +44,9 @@ FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. E
 
 Open **Components** and choose **Set up recommended tools + model** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg + whisper.cpp** updates only those program components and preserves the selected model. Models remain separately selectable. The application never installs an update silently. Open **Advanced settings** only when you want to override a managed path or change the temporary directory.
 
-After choosing a video and audio track, press **Create original SRT**. The language is detected automatically and the result is saved beside the video as `<video>.<language>.srt`. If that name already exists, a numbered file is created instead.
+After choosing a video and audio track, leave **Spoken language** on **Auto detect** or select it manually, then press **Create original SRT**. The result is saved beside the video as `<video>.<language>.srt`. If that name already exists, a numbered file is created instead.
+
+The status area shows preparation, recognition, timing, validation, and saving as separate stages. During recognition, the overall bar is driven by whisper.cpp's own progress callback. A completed file stays at 100%; validation warnings remain visible without discarding an otherwise usable SRT.
 
 On Windows, settings and managed downloads are stored below `%LOCALAPPDATA%\LocalSubtitleStudio`. They are kept outside the project and are not committed to Git. A cancelled or failed download is never activated.
 
@@ -57,6 +63,8 @@ The larger WAV is short-lived working data. It is deleted when another track or 
 Whisper model files are immutable weights rather than applications with regular releases and changelogs. Local Subtitle Studio identifies each catalog entry by its exact filename, byte size, and SHA-256 checksum. When the recommended catalog profile changes, the Components screen can present the new profile; whisper.cpp itself has conventional release notes available from that screen.
 
 Silero VAD is installed with every managed model. It identifies speech boundaries and avoids sending long silent spans to recognition. Recognition requests full token timestamps from whisper.cpp, and the timing optimizer adds only a short tail after the last recognized word while keeping a gap before the next speech segment. This prevents a cue from being extended merely to meet the next sentence; changing to a larger recognition model alone cannot reliably correct timing.
+
+Long recognition segments are split at word-token boundaries before timing is optimized. The defaults target 42 characters per line, two lines, an 800 ms minimum duration, and a 20 characters/second warning threshold. These values, together with speech padding and the next-speech gap, can be adjusted in **Advanced settings**.
 
 ## Test
 
@@ -80,7 +88,8 @@ Current original-subtitle pipeline:
 
 ```text
 video → audio track → temporary PCM → Silero VAD → whisper.cpp full JSON
-      → word-aware timing → two-line formatting → non-overwriting SRT
+      → token-aware segmentation → word-aware timing → validation
+      → balanced formatting → non-overwriting SRT
 ```
 
 ## Licensing

@@ -8,7 +8,17 @@ public interface SubtitleCreationService {
     CreatedSubtitles create(
             Path mediaFile,
             int audioStreamIndex,
+            String spokenLanguage,
             BooleanSupplier cancellationRequested,
-            Consumer<String> progress
+            Consumer<PipelineProgress> progress
     ) throws SubtitleCreationException;
+
+    default CreatedSubtitles create(
+            Path mediaFile,
+            int audioStreamIndex,
+            BooleanSupplier cancellationRequested,
+            Consumer<PipelineProgress> progress
+    ) throws SubtitleCreationException {
+        return create(mediaFile, audioStreamIndex, SpokenLanguage.AUTO.code(), cancellationRequested, progress);
+    }
 }

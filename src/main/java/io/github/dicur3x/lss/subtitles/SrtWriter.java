@@ -1,18 +1,27 @@
 package io.github.dicur3x.lss.subtitles;
 
+import io.github.dicur3x.lss.settings.SubtitlePreferences;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
 public final class SrtWriter {
-    private static final int MAXIMUM_LINE_LENGTH = 42;
+    private final SubtitleTextFormatter textFormatter;
+
+    public SrtWriter() {
+        this(SubtitlePreferences.defaults());
+    }
+
+    public SrtWriter(SubtitlePreferences preferences) {
+        textFormatter = new SubtitleTextFormatter(preferences);
+    }
 
     public Path write(Path mediaFile, String language, List<SubtitleCue> cues)
             throws SubtitleCreationException {
@@ -59,41 +68,17 @@ public final class SrtWriter {
         }
     }
 
-    static String render(List<SubtitleCue> cues) {
+    String render(List<SubtitleCue> cues) {
         StringBuilder output = new StringBuilder();
         for (int index = 0; index < cues.size(); index++) {
             SubtitleCue cue = cues.get(index);
             output.append(index + 1).append("\r\n")
                     .append(timestamp(cue.start())).append(" --> ").append(timestamp(cue.end()))
                     .append("\r\n")
-                    .append(wrap(cue.originalText()))
+                    .append(textFormatter.format(cue.originalText()))
                     .append("\r\n\r\n");
         }
         return output.toString();
-    }
-
-    private static String wrap(String text) {
-        String normalized = text.replaceAll("\\s+", " ").strip();
-        if (normalized.length() <= MAXIMUM_LINE_LENGTH) {
-            return normalized;
-        }
-        List<String> words = new ArrayList<>(List.of(normalized.split(" ")));
-        int bestBreak = 1;
-        int bestDifference = Integer.MAX_VALUE;
-        int firstLength = 0;
-        for (int index = 0; index < words.size() - 1; index++) {
-            firstLength += (index == 0 ? 0 : 1) + words.get(index).length();
-            int secondLength = normalized.length() - firstLength - 1;
-            int overflow = Math.max(0, firstLength - MAXIMUM_LINE_LENGTH)
-                    + Math.max(0, secondLength - MAXIMUM_LINE_LENGTH);
-            int difference = overflow * 1_000 + Math.abs(firstLength - secondLength);
-            if (difference < bestDifference) {
-                bestDifference = difference;
-                bestBreak = index + 1;
-            }
-        }
-        return String.join(" ", words.subList(0, bestBreak)) + "\r\n"
-                + String.join(" ", words.subList(bestBreak, words.size()));
     }
 
     private static String timestamp(Duration duration) {

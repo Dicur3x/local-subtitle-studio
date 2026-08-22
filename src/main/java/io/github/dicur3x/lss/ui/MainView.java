@@ -6,6 +6,9 @@ import io.github.dicur3x.lss.media.MediaProbe;
 import io.github.dicur3x.lss.media.model.AudioTrack;
 import io.github.dicur3x.lss.media.model.MediaInfo;
 import io.github.dicur3x.lss.subtitles.CreatedSubtitles;
+import io.github.dicur3x.lss.subtitles.PipelineProgress;
+import io.github.dicur3x.lss.subtitles.PipelineStage;
+import io.github.dicur3x.lss.subtitles.SpokenLanguage;
 import io.github.dicur3x.lss.subtitles.SubtitleCreationService;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -16,7 +19,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
-import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
@@ -65,7 +68,9 @@ public final class MainView implements AutoCloseable {
     private final Label duration = new Label();
     private final Label status = new Label("Ready");
     private final Label error = new Label();
-    private final ProgressIndicator progress = new ProgressIndicator();
+    private final ProgressBar progress = new ProgressBar(0);
+    private final Label progressPercent = new Label();
+    private final Label progressStages = new Label();
     private final ScrollPane mainScrollPane = new ScrollPane();
     private final Button cancelButton = new Button("Cancel");
     private final Button componentsButton = new Button("Components");
@@ -73,6 +78,7 @@ public final class MainView implements AutoCloseable {
     private final Button createSubtitlesButton = new Button("Create original SRT");
     private final Button prepareAudioButton = new Button("Prepare audio only");
     private final ComboBox<AudioTrack> audioTracks = new ComboBox<>();
+    private final ComboBox<SpokenLanguage> spokenLanguages = new ComboBox<>();
     private final VBox mediaDetails = new VBox(14);
     private final Label audioState = new Label();
     private volatile Future<?> activeTask;
@@ -197,6 +203,12 @@ public final class MainView implements AutoCloseable {
             }
         });
 
+        Label languageLabel = new Label("Spoken language");
+        languageLabel.getStyleClass().add("field-label");
+        spokenLanguages.setItems(FXCollections.observableArrayList(SpokenLanguage.choices()));
+        spokenLanguages.getSelectionModel().select(SpokenLanguage.AUTO);
+        spokenLanguages.setMaxWidth(Double.MAX_VALUE);
+
         audioState.setText("The selected track will be decoded to lossless 16 kHz mono PCM for whisper.cpp.");
         audioState.getStyleClass().add("muted");
         audioState.setWrapText(true);
@@ -213,6 +225,7 @@ public final class MainView implements AutoCloseable {
         mediaDetails.getChildren().setAll(
                 new HBox(12, selectedFile, spacer(), duration),
                 new VBox(7, audioLabel, audioTracks),
+                new VBox(7, languageLabel, spokenLanguages),
                 audioActionRow
         );
         mediaDetails.setPadding(new Insets(20));
@@ -220,16 +233,18 @@ public final class MainView implements AutoCloseable {
     }
 
     private HBox createStatusBar() {
-        progress.setPrefSize(22, 22);
-        progress.setMinSize(22, 22);
+        progress.setMaxWidth(Double.MAX_VALUE);
+        progressPercent.getStyleClass().add("progress-percentage");
+        progressStages.getStyleClass().add("pipeline-stages");
+        progressStages.setWrapText(true);
         cancelButton.getStyleClass().add("quiet-button");
         cancelButton.setOnAction(event -> cancelFromUi());
         error.getStyleClass().add("error-text");
         error.setWrapText(true);
 
-        HBox row = new HBox(10, progress, status, spacer(), cancelButton);
+        HBox row = new HBox(10, status, spacer(), progressPercent, cancelButton);
         row.setAlignment(Pos.CENTER_LEFT);
-        VBox wrapper = new VBox(8, row, error);
+        VBox wrapper = new VBox(8, row, progress, progressStages, error);
         HBox.setHgrow(wrapper, Priority.ALWAYS);
         wrapper.setMaxWidth(Double.MAX_VALUE);
         return new HBox(wrapper);
@@ -296,8 +311,7 @@ public final class MainView implements AutoCloseable {
         mediaDetails.setManaged(false);
         audioTracks.getItems().clear();
         error.setText("");
-        progress.setVisible(true);
-        progress.setManaged(true);
+        showIndeterminateProgress();
         cancelButton.setVisible(true);
         cancelButton.setManaged(true);
         status.setText("Inspecting audio tracks…");
@@ -314,8 +328,7 @@ public final class MainView implements AutoCloseable {
         }
         mediaDetails.setVisible(true);
         mediaDetails.setManaged(true);
-        progress.setVisible(false);
-        progress.setManaged(false);
+        hideProgress();
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         error.setText("");
@@ -343,8 +356,7 @@ public final class MainView implements AutoCloseable {
         long operationId = beginOperation();
         closePreparedAudio();
         error.setText("");
-        progress.setVisible(true);
-        progress.setManaged(true);
+        showIndeterminateProgress();
         cancelButton.setVisible(true);
         cancelButton.setManaged(true);
         status.setText("Preparing 16 kHz mono PCM audio…");
@@ -380,16 +392,17 @@ public final class MainView implements AutoCloseable {
     private void createSubtitles() {
         MediaInfo media = currentMedia;
         AudioTrack selectedTrack = audioTracks.getSelectionModel().getSelectedItem();
-        if (media == null || selectedTrack == null) {
-            showOperationError("Subtitle creation failed", "Choose an audio track first.");
+        SpokenLanguage selectedLanguage = spokenLanguages.getSelectionModel().getSelectedItem();
+        if (media == null || selectedTrack == null || selectedLanguage == null) {
+            showOperationError("Subtitle creation failed", "Choose an audio track and spoken language first.");
             return;
         }
 
         long operationId = beginOperation();
         closePreparedAudio();
         error.setText("");
-        progress.setVisible(true);
-        progress.setManaged(true);
+        updatePipelineProgress(PipelineProgress.at(
+                PipelineStage.PREPARING_AUDIO, 0, "Preparing speech-recognition audio…"));
         cancelButton.setVisible(true);
         cancelButton.setManaged(true);
         status.setText("Starting subtitle creation…");
@@ -399,8 +412,10 @@ public final class MainView implements AutoCloseable {
         activeTask = worker.submit(() -> {
             try {
                 CreatedSubtitles result = subtitleCreationService.create(
-                        media.file(), selectedTrack.streamIndex(), Thread.currentThread()::isInterrupted,
-                        message -> runOnUiIfCurrent(operationId, () -> status.setText(message)));
+                        media.file(), selectedTrack.streamIndex(), selectedLanguage.code(),
+                        Thread.currentThread()::isInterrupted,
+                        pipelineProgress -> runOnUiIfCurrent(
+                                operationId, () -> updatePipelineProgress(pipelineProgress)));
                 runOnUiIfCurrent(operationId, () -> showCreatedSubtitles(result));
             } catch (CancellationException ignored) {
                 runOnUiIfCurrent(operationId, () -> restoreMediaReadyState("Subtitle creation cancelled"));
@@ -413,22 +428,22 @@ public final class MainView implements AutoCloseable {
     }
 
     private void showCreatedSubtitles(CreatedSubtitles result) {
-        progress.setVisible(false);
-        progress.setManaged(false);
+        updatePipelineProgress(PipelineProgress.complete("Original subtitles are ready"));
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         setControlsBusy(false);
         audioState.setText("Saved beside the video: " + result.file().getFileName());
-        status.setText(String.format(Locale.ROOT, "Created %d subtitle cues · language: %s",
-                result.cueCount(), result.language()));
-        error.setText("");
+        status.setText(String.format(Locale.ROOT, "Created %d subtitle cues · language: %s · %s",
+                result.cueCount(), result.language(), result.warnings().isEmpty()
+                        ? "checks passed" : result.warnings().size() + " warning(s)"));
+        showNotice(result.warnings().isEmpty() ? "" : "Check: " + String.join(" ", result.warnings()),
+                !result.warnings().isEmpty());
         activeTask = null;
     }
 
     private void showPreparedAudio(PreparedAudio result) {
         preparedAudio = result;
-        progress.setVisible(false);
-        progress.setManaged(false);
+        hideProgress();
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         setControlsBusy(false);
@@ -446,8 +461,7 @@ public final class MainView implements AutoCloseable {
     }
 
     private void restoreMediaReadyState(String message) {
-        progress.setVisible(false);
-        progress.setManaged(false);
+        hideProgress();
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         setControlsBusy(false);
@@ -457,13 +471,12 @@ public final class MainView implements AutoCloseable {
     }
 
     private void showOperationError(String title, String message) {
-        progress.setVisible(false);
-        progress.setManaged(false);
+        hideProgress();
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         setControlsBusy(false);
         status.setText(title);
-        error.setText(message == null || message.isBlank() ? "Unexpected operation error." : message);
+        showNotice(message == null || message.isBlank() ? "Unexpected operation error." : message, false);
         activeTask = null;
     }
 
@@ -471,20 +484,18 @@ public final class MainView implements AutoCloseable {
         currentMedia = null;
         mediaDetails.setVisible(false);
         mediaDetails.setManaged(false);
-        progress.setVisible(false);
-        progress.setManaged(false);
+        hideProgress();
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         status.setText("Could not inspect this file");
-        error.setText(message == null || message.isBlank() ? "Unexpected media inspection error." : message);
+        showNotice(message == null || message.isBlank() ? "Unexpected media inspection error." : message, false);
         setControlsBusy(false);
         mainScrollPane.setVvalue(0);
         activeTask = null;
     }
 
     private void showIdleState() {
-        progress.setVisible(false);
-        progress.setManaged(false);
+        hideProgress();
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         if (audioTracks.getItems().isEmpty()) {
@@ -533,10 +544,69 @@ public final class MainView implements AutoCloseable {
         return operationGeneration.get() == operationId;
     }
 
+    private void showIndeterminateProgress() {
+        progress.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+        progress.setVisible(true);
+        progress.setManaged(true);
+        progressPercent.setText("Working…");
+        progressPercent.setVisible(true);
+        progressPercent.setManaged(true);
+        progressStages.setVisible(false);
+        progressStages.setManaged(false);
+    }
+
+    private void updatePipelineProgress(PipelineProgress pipelineProgress) {
+        progress.setProgress(pipelineProgress.overallPercent() / 100d);
+        progress.setVisible(true);
+        progress.setManaged(true);
+        progressPercent.setText(pipelineProgress.overallPercent() + "%");
+        progressPercent.setVisible(true);
+        progressPercent.setManaged(true);
+        progressStages.setText(formatPipelineStages(pipelineProgress));
+        progressStages.setVisible(true);
+        progressStages.setManaged(true);
+        status.setText(pipelineProgress.message());
+    }
+
+    private void hideProgress() {
+        progress.setVisible(false);
+        progress.setManaged(false);
+        progressPercent.setVisible(false);
+        progressPercent.setManaged(false);
+        progressStages.setVisible(false);
+        progressStages.setManaged(false);
+    }
+
+    private void showNotice(String message, boolean warning) {
+        error.setText(message);
+        error.getStyleClass().removeAll("error-text", "warning-text");
+        error.getStyleClass().add(warning ? "warning-text" : "error-text");
+    }
+
+    private static String formatPipelineStages(PipelineProgress current) {
+        List<PipelineStage> displayed = List.of(
+                PipelineStage.PREPARING_AUDIO,
+                PipelineStage.TRANSCRIBING,
+                PipelineStage.OPTIMIZING,
+                PipelineStage.VALIDATING,
+                PipelineStage.WRITING
+        );
+        return displayed.stream().map(stage -> {
+            if (current.stage() == PipelineStage.COMPLETE || stage.ordinal() < current.stage().ordinal()) {
+                return "✓ " + stage.displayName();
+            }
+            if (stage == current.stage()) {
+                return "● " + stage.displayName() + " " + current.stagePercent() + "%";
+            }
+            return "○ " + stage.displayName();
+        }).collect(java.util.stream.Collectors.joining("   "));
+    }
+
     private void setControlsBusy(boolean busy) {
         componentsButton.setDisable(busy);
         settingsButton.setDisable(busy);
         audioTracks.setDisable(busy);
+        spokenLanguages.setDisable(busy);
         createSubtitlesButton.setDisable(busy);
         prepareAudioButton.setDisable(busy);
     }

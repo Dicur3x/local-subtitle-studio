@@ -12,9 +12,13 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class WhisperCppTranscriber {
     private static final long MAXIMUM_JSON_BYTES = 128L * 1024 * 1024;
+    private static final Pattern PROGRESS_LINE = Pattern.compile("progress\\s*=\\s*(\\d{1,3})%");
 
     private final String executable;
     private final Path model;
@@ -38,7 +42,32 @@ public final class WhisperCppTranscriber {
 
     public TranscriptionResult transcribe(Path audioFile, BooleanSupplier cancellationRequested)
             throws SubtitleCreationException {
+        return transcribe(audioFile, cancellationRequested, percent -> { });
+    }
+
+    public TranscriptionResult transcribe(
+            Path audioFile,
+            BooleanSupplier cancellationRequested,
+            IntConsumer progress
+    ) throws SubtitleCreationException {
+        return transcribe(audioFile, SpokenLanguage.AUTO.code(), cancellationRequested, progress);
+    }
+
+    public TranscriptionResult transcribe(
+            Path audioFile,
+            String spokenLanguage,
+            BooleanSupplier cancellationRequested,
+            IntConsumer progress
+    ) throws SubtitleCreationException {
         Objects.requireNonNull(cancellationRequested, "cancellationRequested");
+        Objects.requireNonNull(progress, "progress");
+        String language;
+        try {
+            language = SpokenLanguage.requireSupportedCode(spokenLanguage);
+        } catch (IllegalArgumentException exception) {
+            throw new SubtitleCreationException(
+                    "The selected spoken language is not supported by whisper.cpp.", exception);
+        }
         Path audio = validateInputs(audioFile);
         Path outputBase = audio.getParent().resolve("whisper-" + UUID.randomUUID());
         Path outputJson = Path.of(outputBase + ".json");
@@ -47,10 +76,11 @@ public final class WhisperCppTranscriber {
                 executable,
                 "--model", model.toString(),
                 "--file", audio.toString(),
-                "--language", "auto",
+                "--language", language,
                 "--output-json-full",
                 "--output-file", outputBase.toString(),
                 "--no-prints",
+                "--print-progress",
                 "--split-on-word",
                 "--max-len", "84",
                 "--word-thold", "0.01",
@@ -65,7 +95,10 @@ public final class WhisperCppTranscriber {
 
         try {
             throwIfCancelled(cancellationRequested);
-            ProcessResult result = processRunner.run(List.copyOf(command), cancellationRequested);
+            progress.accept(0);
+            ProcessResult result = processRunner.runStreaming(
+                    List.copyOf(command), cancellationRequested, line -> { },
+                    line -> progressFromLine(line).ifPresent(progress));
             throwIfCancelled(cancellationRequested);
             if (result.exitCode() != 0) {
                 throw new SubtitleCreationException("whisper.cpp could not recognize the selected audio"
@@ -77,6 +110,7 @@ public final class WhisperCppTranscriber {
             if (Files.size(outputJson) > MAXIMUM_JSON_BYTES) {
                 throw new SubtitleCreationException("whisper.cpp transcription data is unexpectedly large.");
             }
+            progress.accept(100);
             return parser.parse(outputJson);
         } catch (CancellationException exception) {
             throw exception;
@@ -96,6 +130,18 @@ public final class WhisperCppTranscriber {
                 // The enclosing prepared-audio directory is removed after this operation.
             }
         }
+    }
+
+    static java.util.OptionalInt progressFromLine(String line) {
+        if (line == null) {
+            return java.util.OptionalInt.empty();
+        }
+        Matcher matcher = PROGRESS_LINE.matcher(line);
+        if (!matcher.find()) {
+            return java.util.OptionalInt.empty();
+        }
+        int percent = Integer.parseInt(matcher.group(1));
+        return java.util.OptionalInt.of(Math.max(0, Math.min(100, percent)));
     }
 
     private Path validateInputs(Path audioFile) throws SubtitleCreationException {
