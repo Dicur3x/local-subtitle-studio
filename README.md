@@ -16,7 +16,7 @@ No media is uploaded. Cloud services are not used by the current build.
 
 ## Requirements
 
-- JDK 21 or newer.
+- A JDK 17 or newer to start Gradle. The build pins its daemon/compiler/runtime to JDK 21 and can provision that toolchain automatically when it is missing.
 - `ffprobe` available on `PATH`, or its path supplied through `LSS_FFPROBE_PATH`.
 - Windows 10/11 for the currently tested build. The code avoids Windows-only process invocation so Linux and macOS can be added later.
 
