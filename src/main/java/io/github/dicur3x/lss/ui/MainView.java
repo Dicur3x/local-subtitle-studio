@@ -594,7 +594,8 @@ public final class MainView implements AutoCloseable {
         progressStages.setText(formatPipelineStages(pipelineProgress));
         progressStages.setVisible(true);
         progressStages.setManaged(true);
-        status.setText(pipelineProgress.message());
+        status.setText(tr("pipeline.status."
+                + pipelineProgress.stage().name().toLowerCase(Locale.ROOT)));
     }
 
     private void hideProgress() {
