@@ -25,6 +25,6 @@ final class ReleaseNotesText {
             return text;
         }
         return text.substring(0, MAXIMUM_CHARACTERS).stripTrailing()
-                + "\n\n…The remaining notes are available on the official source.";
+                + "\n\n" + I18n.tr("releaseNotes.truncated");
     }
 }

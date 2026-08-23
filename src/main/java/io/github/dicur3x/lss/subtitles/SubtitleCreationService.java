@@ -5,6 +5,10 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 public interface SubtitleCreationService {
+    default SubtitleReadiness readiness() {
+        return SubtitleReadiness.readyState();
+    }
+
     CreatedSubtitles create(
             Path mediaFile,
             int audioStreamIndex,

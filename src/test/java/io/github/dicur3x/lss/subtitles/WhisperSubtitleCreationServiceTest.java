@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.dicur3x.lss.infrastructure.process.ProcessResult;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
 import io.github.dicur3x.lss.settings.SubtitlePreferences;
+import io.github.dicur3x.lss.settings.OutputPreferences;
+import io.github.dicur3x.lss.settings.UiLanguage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -29,7 +31,8 @@ class WhisperSubtitleCreationServiceTest {
         ApplicationSettings settings = new ApplicationSettings(
                 ApplicationSettings.CURRENT_SCHEMA_VERSION,
                 "ffmpeg-test", "ffprobe-test", "whisper-test",
-                model.toString(), vad.toString(), workingRoot.toString(), SubtitlePreferences.defaults());
+                model.toString(), vad.toString(), workingRoot.toString(), SubtitlePreferences.defaults(),
+                OutputPreferences.defaults(), UiLanguage.ENGLISH);
         List<List<String>> commands = new ArrayList<>();
 
         WhisperSubtitleCreationService service = new WhisperSubtitleCreationService(
@@ -60,7 +63,7 @@ class WhisperSubtitleCreationServiceTest {
         assertEquals("episode.ru.srt", created.file().getFileName().toString());
         assertEquals("ru", created.language());
         assertEquals(1, created.cueCount());
-        assertTrue(Files.readString(created.file()).contains("00:00:01,050 --> 00:00:02,000"));
+        assertTrue(Files.readString(created.file()).contains("00:00:00,950 --> 00:00:04,200"));
         assertEquals(PipelineStage.PREPARING_AUDIO, progress.getFirst().stage());
         assertEquals(PipelineStage.COMPLETE, progress.getLast().stage());
         assertEquals(100, progress.getLast().overallPercent());
@@ -72,5 +75,22 @@ class WhisperSubtitleCreationServiceTest {
         try (var children = Files.list(workingRoot)) {
             assertFalse(children.findAny().isPresent());
         }
+    }
+
+    @Test
+    void reportsMissingRecognitionSetupBeforeStartingAProcess() {
+        ApplicationSettings settings = ApplicationSettings.defaults();
+        WhisperSubtitleCreationService service = new WhisperSubtitleCreationService(
+                () -> settings,
+                (command, cancellation) -> {
+                    throw new AssertionError("Readiness must not start external processes");
+                },
+                new ObjectMapper());
+
+        SubtitleReadiness readiness = service.readiness();
+
+        assertFalse(readiness.ready());
+        assertTrue(readiness.problems().stream().anyMatch(problem -> problem.contains("whisper.cpp")));
+        assertTrue(readiness.problems().stream().anyMatch(problem -> problem.contains("Whisper model")));
     }
 }

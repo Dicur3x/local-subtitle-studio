@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SubtitleValidatorTest {
     private final SubtitlePreferences preferences = SubtitlePreferences.defaults();
@@ -28,6 +29,19 @@ class SubtitleValidatorTest {
 
         assertThrows(SubtitleCreationException.class,
                 () -> new SubtitleValidator(preferences).validate(List.of(first, second)));
+    }
+
+    @Test
+    void reportsLowConfidenceWithoutRewritingDialogue() throws Exception {
+        List<TokenTiming> tokens = List.of(
+                new TokenTiming(" strange", Duration.ZERO, Duration.ofMillis(300), 0.1),
+                new TokenTiming(" phrase", Duration.ofMillis(300), Duration.ofMillis(600), 0.2));
+        SubtitleCue uncertain = new SubtitleCue(
+                1, Duration.ZERO, Duration.ofSeconds(2), "strange phrase", tokens);
+
+        SubtitleValidationReport report = new SubtitleValidator(preferences).validate(List.of(uncertain));
+
+        assertTrue(report.warnings().stream().anyMatch(text -> text.contains("low recognition confidence")));
     }
 
     private static SubtitleCue cue(long id, long start, long end, String text) {

@@ -29,6 +29,18 @@ public record SpokenLanguage(String code, String displayName) {
         return SUPPORTED;
     }
 
+    public static List<SpokenLanguage> choices(Locale displayLocale) {
+        Locale safeLocale = Objects.requireNonNullElse(displayLocale, Locale.ENGLISH);
+        String autoName = "ru".equals(safeLocale.getLanguage())
+                ? "Определить автоматически (рекомендуется)" : AUTO.displayName;
+        return java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(new SpokenLanguage(AUTO.code, autoName)),
+                Arrays.stream(SUPPORTED_CODES.split("\\s+"))
+                        .filter(code -> !code.isBlank())
+                        .map(code -> fromCode(code, safeLocale)))
+                .toList();
+    }
+
     public static String requireSupportedCode(String code) {
         String normalized = code == null || code.isBlank()
                 ? AUTO.code : code.strip().toLowerCase(Locale.ROOT);
@@ -47,8 +59,12 @@ public record SpokenLanguage(String code, String displayName) {
     }
 
     private static SpokenLanguage fromCode(String code) {
+        return fromCode(code, Locale.ENGLISH);
+    }
+
+    private static SpokenLanguage fromCode(String code, Locale displayLocale) {
         Locale locale = Locale.forLanguageTag(code);
-        String name = locale.getDisplayLanguage(Locale.ENGLISH);
+        String name = locale.getDisplayLanguage(displayLocale);
         if (name == null || name.isBlank() || name.equalsIgnoreCase(code)) {
             name = code.toUpperCase(Locale.ROOT);
         }

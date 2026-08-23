@@ -1,5 +1,7 @@
 package io.github.dicur3x.lss.subtitles;
 
+import io.github.dicur3x.lss.settings.OutputLocation;
+import io.github.dicur3x.lss.settings.OutputPreferences;
 import io.github.dicur3x.lss.settings.SubtitlePreferences;
 
 import java.io.IOException;
@@ -14,22 +16,25 @@ import java.util.Objects;
 
 public final class SrtWriter {
     private final SubtitleTextFormatter textFormatter;
+    private final OutputPreferences outputPreferences;
 
     public SrtWriter() {
-        this(SubtitlePreferences.defaults());
+        this(SubtitlePreferences.defaults(), OutputPreferences.defaults());
     }
 
     public SrtWriter(SubtitlePreferences preferences) {
+        this(preferences, OutputPreferences.defaults());
+    }
+
+    public SrtWriter(SubtitlePreferences preferences, OutputPreferences outputPreferences) {
         textFormatter = new SubtitleTextFormatter(preferences);
+        this.outputPreferences = Objects.requireNonNull(outputPreferences, "outputPreferences");
     }
 
     public Path write(Path mediaFile, String language, List<SubtitleCue> cues)
             throws SubtitleCreationException {
         Path media = Objects.requireNonNull(mediaFile, "mediaFile").toAbsolutePath().normalize();
-        Path directory = media.getParent();
-        if (directory == null || !Files.isDirectory(directory) || !Files.isWritable(directory)) {
-            throw new SubtitleCreationException("The video folder is not writable, so the SRT file cannot be saved.");
-        }
+        Path directory = outputDirectory(media);
         List<SubtitleCue> safeCues = List.copyOf(Objects.requireNonNull(cues, "cues"));
         if (safeCues.isEmpty()) {
             throw new SubtitleCreationException("No speech was recognized, so an empty SRT file was not created.");
@@ -56,7 +61,7 @@ public final class SrtWriter {
         } catch (SubtitleCreationException exception) {
             throw exception;
         } catch (IOException exception) {
-            throw new SubtitleCreationException("Could not save the SRT file beside the video.", exception);
+            throw new SubtitleCreationException("Could not save the SRT file in the selected output folder.", exception);
         } finally {
             if (temporary != null) {
                 try {
@@ -65,6 +70,40 @@ public final class SrtWriter {
                     // The finished SRT, if any, has already been moved into place.
                 }
             }
+        }
+    }
+
+    private Path outputDirectory(Path media) throws SubtitleCreationException {
+        Path videoDirectory = media.getParent();
+        if (videoDirectory == null) {
+            throw new SubtitleCreationException("The video has no parent folder for subtitle output.");
+        }
+        Path directory = switch (outputPreferences.location()) {
+            case BESIDE_VIDEO -> videoDirectory;
+            case SUBS_FOLDER -> videoDirectory.resolve("Subs");
+            case CUSTOM_FOLDER -> customOutputDirectory();
+        };
+        try {
+            if (outputPreferences.location() != OutputLocation.BESIDE_VIDEO) {
+                Files.createDirectories(directory);
+            }
+        } catch (IOException exception) {
+            throw new SubtitleCreationException("Could not create the selected subtitle folder.", exception);
+        }
+        if (!Files.isDirectory(directory) || !Files.isWritable(directory)) {
+            throw new SubtitleCreationException("The selected subtitle folder is not writable.");
+        }
+        return directory;
+    }
+
+    private Path customOutputDirectory() throws SubtitleCreationException {
+        if (outputPreferences.customDirectory().isBlank()) {
+            throw new SubtitleCreationException("Choose a custom subtitle folder in Advanced settings first.");
+        }
+        try {
+            return Path.of(outputPreferences.customDirectory()).toAbsolutePath().normalize();
+        } catch (RuntimeException exception) {
+            throw new SubtitleCreationException("The custom subtitle folder path is invalid.", exception);
         }
     }
 

@@ -25,6 +25,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
+import javafx.util.StringConverter;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -36,6 +37,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import static io.github.dicur3x.lss.ui.I18n.tr;
+
 public final class ComponentsDialog {
     private final ManagedToolsService toolsService;
     private final Consumer<String> openLink;
@@ -44,17 +47,17 @@ public final class ComponentsDialog {
     private final Map<ManagedComponent, Boolean> installAvailable = new EnumMap<>(ManagedComponent.class);
     private final AtomicReference<Thread> activeThread = new AtomicReference<>();
     private final AtomicBoolean closed = new AtomicBoolean();
-    private final Button checkUpdates = new Button("Check versions");
-    private final Button updateComponents = new Button("Update FFmpeg + whisper.cpp");
-    private final Button setupRecommended = new Button("Set up recommended tools + model (~700 MB)");
-    private final Button cancel = new Button("Cancel download");
+    private final Button checkUpdates = new Button(tr("components.checkVersions"));
+    private final Button updateComponents = new Button(tr("components.updatePrograms"));
+    private final Button setupRecommended = new Button(tr("components.setupRecommended"));
+    private final Button cancel = new Button(tr("components.cancelDownload"));
     private final ProgressBar progressBar = new ProgressBar(0);
     private final Label operationPercent = new Label();
-    private final Label operationStatus = new Label("No network check has been made yet.");
+    private final Label operationStatus = new Label(tr("components.notChecked"));
     private final ComboBox<WhisperModelProfile> modelProfiles = new ComboBox<>();
     private final Label modelDescription = new Label();
     private final Label modelStatus = new Label();
-    private final Button installModel = new Button("Install selected model + VAD");
+    private final Button installModel = new Button(tr("components.installModel"));
 
     public ComponentsDialog(ManagedToolsService toolsService, Consumer<String> openLink) {
         this.toolsService = Objects.requireNonNull(toolsService, "toolsService");
@@ -64,8 +67,8 @@ public final class ComponentsDialog {
     public void showAndWait(Window owner) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.initOwner(owner);
-        dialog.setTitle("Local Subtitle Studio components");
-        dialog.setHeaderText("One-click local components");
+        dialog.setTitle(tr("components.title"));
+        dialog.setHeaderText(tr("components.header"));
         dialog.setResizable(true);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().setPrefSize(860, 650);
@@ -73,10 +76,7 @@ public final class ComponentsDialog {
                 getClass().getResource("/io/github/dicur3x/lss/app.css"), "app.css").toExternalForm());
         dialog.getDialogPane().getStyleClass().addAll("settings-dialog", "components-dialog");
 
-        Label explanation = new Label(
-                "The app downloads components from trusted project sources into your Local AppData folder and applies "
-                        + "their paths automatically. Integrity details are recorded. Nothing is updated silently."
-        );
+        Label explanation = new Label(tr("components.explanation"));
         explanation.setWrapText(true);
         explanation.getStyleClass().add("muted");
 
@@ -137,19 +137,18 @@ public final class ComponentsDialog {
     private ComponentRow createComponentRow(ManagedComponent component) {
         Label title = new Label(component.displayName());
         title.getStyleClass().add("component-title");
-        Label status = new Label("Checking local installation…");
+        Label status = new Label(tr("components.checkingLocal"));
         status.setWrapText(true);
         status.getStyleClass().add("muted");
         Label license = new Label(component == ManagedComponent.FFMPEG
-                ? "Windows essentials build · GPLv3 · SHA-256 verified before installation"
-                : "Official stable Windows x64 release · MIT · published SHA-256 verified when available");
+                ? tr("components.ffmpegLicense") : tr("components.whisperLicense"));
         license.setWrapText(true);
         license.getStyleClass().add("component-license");
 
-        Button install = new Button("Install");
+        Button install = new Button(tr("components.install"));
         install.getStyleClass().add("primary-button");
         install.setDisable(true);
-        Button notes = new Button("Release notes");
+        Button notes = new Button(tr("components.releaseNotes"));
         notes.getStyleClass().add("quiet-button");
         notes.setDisable(true);
         notes.setOnAction(event -> Optional.ofNullable(latestReleases.get(component))
@@ -165,21 +164,27 @@ public final class ComponentsDialog {
     }
 
     private VBox createModelCard() {
-        Label title = new Label("Recognition model + voice detection");
+        Label title = new Label(tr("components.modelTitle"));
         title.getStyleClass().add("component-title");
-        Label source = new Label(
-                "Official converted OpenAI Whisper weights and Silero VAD · MIT · exact size and SHA-256 checks"
-        );
+        Label source = new Label(tr("components.modelSourceText"));
         source.setWrapText(true);
         source.getStyleClass().add("component-license");
-        Label modelUpdates = new Label(
-                "Model weights are fixed artifacts, so they do not have a traditional changelog. "
-                        + "A changed recommended profile will be shown as a new catalog choice."
-        );
+        Label modelUpdates = new Label(tr("components.modelUpdates"));
         modelUpdates.setWrapText(true);
         modelUpdates.getStyleClass().add("component-license");
 
         modelProfiles.setItems(FXCollections.observableArrayList(WhisperModelProfile.values()));
+        modelProfiles.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(WhisperModelProfile profile) {
+                return profile == null ? "" : profileName(profile);
+            }
+
+            @Override
+            public WhisperModelProfile fromString(String value) {
+                return modelProfiles.getValue();
+            }
+        });
         modelProfiles.getSelectionModel().select(WhisperModelProfile.BALANCED);
         modelProfiles.setMaxWidth(Double.MAX_VALUE);
         modelProfiles.valueProperty().addListener((observable, oldProfile, newProfile) -> updateModelChoice());
@@ -190,7 +195,7 @@ public final class ComponentsDialog {
 
         installModel.getStyleClass().add("primary-button");
         installModel.setOnAction(event -> installSelectedModel());
-        Button modelSource = new Button("Model source");
+        Button modelSource = new Button(tr("components.modelSource"));
         modelSource.getStyleClass().add("quiet-button");
         modelSource.setOnAction(event -> openLink.accept("https://huggingface.co/ggerganov/whisper.cpp"));
         HBox actions = new HBox(10, installModel, modelSource);
@@ -207,8 +212,8 @@ public final class ComponentsDialog {
             try {
                 Optional<InstalledComponent> installed = toolsService.current(component);
                 rows.get(component).status().setText(installed
-                        .map(value -> "Managed version " + value.version() + " is installed. Check for updates when ready.")
-                        .orElse("Not installed by the app. The current manual or PATH configuration is still used."));
+                        .map(value -> tr("components.managedInstalled", value.version()))
+                        .orElse(tr("components.notManaged")));
             } catch (Exception exception) {
                 rows.get(component).status().setText(exception.getMessage());
             }
@@ -218,9 +223,9 @@ public final class ComponentsDialog {
             if (current.isPresent()) {
                 WhisperModelProfile profile = current.orElseThrow().profile();
                 modelProfiles.getSelectionModel().select(profile);
-                modelStatus.setText("Installed: " + profile.displayName() + " · VAD is ready");
+                modelStatus.setText(tr("components.modelInstalled", profileName(profile)));
             } else {
-                modelStatus.setText("No managed recognition model is installed yet.");
+                modelStatus.setText(tr("components.noModel"));
             }
         } catch (Exception exception) {
             modelStatus.setText(exception.getMessage());
@@ -230,7 +235,7 @@ public final class ComponentsDialog {
 
     private void checkAllComponents() {
         runTask(
-                "Checking official release sources…",
+                tr("components.checkingSources"),
                 () -> {
                     Map<ManagedComponent, CheckOutcome> checks = new EnumMap<>(ManagedComponent.class);
                     for (ManagedComponent component : ManagedComponent.values()) {
@@ -241,7 +246,7 @@ public final class ComponentsDialog {
                             throw exception;
                         } catch (Exception exception) {
                             checks.put(component, new CheckOutcome(null,
-                                    exception.getMessage() == null ? "Version check failed." : exception.getMessage()));
+                                    exception.getMessage() == null ? tr("components.checkFailed") : exception.getMessage()));
                         }
                     }
                     return checks;
@@ -260,9 +265,8 @@ public final class ComponentsDialog {
                         }
                     }
                     operationStatus.setText(failures == 0
-                            ? "Version check complete. Updates are installed only when you choose them."
-                            : "Version check completed with " + failures
-                            + (failures == 1 ? " source error. Try again later." : " source errors. Try again later."));
+                            ? tr("components.checkComplete")
+                            : tr("components.sourceErrors", failures));
                 }
         );
     }
@@ -270,14 +274,15 @@ public final class ComponentsDialog {
     private void renderCheck(ComponentCheck check) {
         ComponentRow row = rows.get(check.component());
         String configured = check.configuredVersion().isBlank()
-                ? "not detected" : check.configuredVersion();
-        String status = "Configured: " + configured + " · available stable: " + check.latestRelease().version();
+                ? tr("components.notDetected") : check.configuredVersion();
+        String status = tr("components.versionStatus", configured, check.latestRelease().version());
         if (!check.updateAvailable()) {
-            status += " · up to date";
+            status += tr("components.upToDateSuffix");
         }
         installAvailable.put(check.component(), check.updateAvailable());
         row.status().setText(status);
-        row.install().setText(check.configuredVersion().isBlank() ? "Install" : "Install / update");
+        row.install().setText(check.configuredVersion().isBlank()
+                ? tr("components.install") : tr("components.installUpdate"));
         row.install().setDisable(!check.updateAvailable());
         row.notes().setDisable(false);
     }
@@ -285,25 +290,24 @@ public final class ComponentsDialog {
     private void installComponent(ManagedComponent component) {
         ComponentRelease release = latestReleases.get(component);
         if (release == null) {
-            operationStatus.setText("Check for updates before installing a component.");
+            operationStatus.setText(tr("components.checkBeforeInstall"));
             return;
         }
         runTask(
-                "Preparing " + component.displayName() + "…",
+                tr("components.preparing", component.displayName()),
                 () -> toolsService.install(release, progressListener(), Thread.currentThread()::isInterrupted),
                 installed -> {
                     ComponentRow row = rows.get(component);
-                    row.status().setText("Managed version " + installed.version()
-                            + " is installed and active.");
+                    row.status().setText(tr("components.managedActive", installed.version()));
                     installAvailable.put(component, false);
-                    operationStatus.setText(component.displayName() + " is ready. Its path was applied automatically.");
+                    operationStatus.setText(tr("components.componentReady", component.displayName()));
                 }
         );
     }
 
     private void setupRecommended() {
         runTask(
-                "Checking and preparing the recommended local toolchain…",
+                tr("components.preparingRecommended"),
                 () -> {
                     Map<ManagedComponent, InstalledComponent> installed = new EnumMap<>(ManagedComponent.class);
                     for (ManagedComponent component : ManagedComponent.values()) {
@@ -322,20 +326,19 @@ public final class ComponentsDialog {
                 result -> {
                     result.components().forEach((component, installed) -> {
                         ComponentRow row = rows.get(component);
-                        row.status().setText("Managed version " + installed.version()
-                                + " is installed and active.");
+                        row.status().setText(tr("components.managedActive", installed.version()));
                         installAvailable.put(component, false);
                     });
                     modelProfiles.getSelectionModel().select(WhisperModelProfile.BALANCED);
-                    modelStatus.setText("Installed: Balanced (recommended) · VAD is ready");
-                    operationStatus.setText("Recommended local components, model, and voice detection are ready.");
+                    modelStatus.setText(tr("components.modelInstalled", profileName(WhisperModelProfile.BALANCED)));
+                    operationStatus.setText(tr("components.recommendedReady"));
                 }
         );
     }
 
     private void updateComponents() {
         runTask(
-                "Checking and updating FFmpeg and whisper.cpp…",
+                tr("components.updatingPrograms"),
                 () -> {
                     Map<ManagedComponent, ComponentCheck> checks = new EnumMap<>(ManagedComponent.class);
                     Map<ManagedComponent, InstalledComponent> installed = new EnumMap<>(ManagedComponent.class);
@@ -354,7 +357,7 @@ public final class ComponentsDialog {
                             throw exception;
                         } catch (Exception exception) {
                             errors.put(component, exception.getMessage() == null
-                                    ? "Update failed." : exception.getMessage());
+                                    ? tr("components.updateFailed") : exception.getMessage());
                         }
                     }
                     return new ComponentUpdateResult(checks, installed, errors);
@@ -365,18 +368,17 @@ public final class ComponentsDialog {
                         renderCheck(check);
                     });
                     result.components().forEach((component, installed) -> {
-                        rows.get(component).status().setText("Managed version " + installed.version()
-                                + " is installed and active.");
+                        rows.get(component).status().setText(tr("components.managedActive", installed.version()));
                         installAvailable.put(component, false);
                     });
                     result.errors().forEach((component, message) -> rows.get(component).status().setText(message));
                     if (!result.errors().isEmpty()) {
-                        operationStatus.setText("Some program components could not be updated. The model was not changed.");
+                        operationStatus.setText(tr("components.someUpdateFailed"));
                         operationStatus.getStyleClass().add("validation-warning");
                     } else if (result.components().isEmpty()) {
-                        operationStatus.setText("FFmpeg and whisper.cpp are already current. The model was not changed.");
+                        operationStatus.setText(tr("components.alreadyCurrent"));
                     } else {
-                        operationStatus.setText("Program components updated. The selected model was not changed.");
+                        operationStatus.setText(tr("components.programsUpdated"));
                     }
                 }
         );
@@ -388,13 +390,12 @@ public final class ComponentsDialog {
             return;
         }
         runTask(
-                "Preparing " + profile.displayName() + "…",
+                tr("components.preparing", profileName(profile)),
                 () -> toolsService.installModel(profile, progressListener(), Thread.currentThread()::isInterrupted),
                 installed -> {
-                    modelStatus.setText("Installed: " + profile.displayName()
-                            + " · model and Silero VAD paths applied automatically");
+                    modelStatus.setText(tr("components.modelInstalledApplied", profileName(profile)));
                     installModel.setDisable(true);
-                    operationStatus.setText("Recognition model and voice detection are ready.");
+                    operationStatus.setText(tr("components.recognitionReady"));
                 }
         );
     }
@@ -404,17 +405,18 @@ public final class ComponentsDialog {
         if (profile == null) {
             return;
         }
-        modelDescription.setText(profile.description() + " Download: " + formatSize(profile.sizeBytes()) + ".");
+        modelDescription.setText(profileDescription(profile) + " "
+                + tr("components.downloadSize", formatSize(profile.sizeBytes())));
         try {
             boolean alreadyInstalled = toolsService.currentModel()
                     .filter(bundle -> bundle.profileId().equals(profile.id())
                             && bundle.modelSha256().equalsIgnoreCase(profile.sha256()))
                     .isPresent();
             installModel.setDisable(alreadyInstalled || activeThread.get() != null);
-            installModel.setText(alreadyInstalled ? "Installed" : "Install selected model + VAD");
+            installModel.setText(alreadyInstalled ? tr("components.installed") : tr("components.installModel"));
         } catch (Exception exception) {
             installModel.setDisable(false);
-            installModel.setText("Install selected model + VAD");
+            installModel.setText(tr("components.installModel"));
         }
     }
 
@@ -426,7 +428,7 @@ public final class ComponentsDialog {
             progressBar.setProgress(total > 0 ? Math.min(1d, completed / (double) total) : -1d);
             operationPercent.setText(total > 0
                     ? Math.min(100, Math.max(0, Math.round(completed * 100f / total))) + "%"
-                    : "Working…");
+                    : tr("common.working"));
             operationStatus.setText(total > 0
                     ? phase + " · " + formatSize(completed) + " / " + formatSize(total)
                     : phase + " · " + formatSize(completed));
@@ -446,7 +448,7 @@ public final class ComponentsDialog {
             } catch (CancellationException exception) {
                 Platform.runLater(() -> {
                     if (!closed.get()) {
-                        operationStatus.setText("Operation cancelled. No incomplete component was activated.");
+                        operationStatus.setText(tr("components.operationCancelled"));
                         setBusy(false);
                     }
                 });
@@ -454,7 +456,7 @@ public final class ComponentsDialog {
                 Platform.runLater(() -> {
                     if (!closed.get()) {
                         operationStatus.setText(exception.getMessage() == null
-                                ? "The component operation failed." : exception.getMessage());
+                                ? tr("components.operationFailed") : exception.getMessage());
                         operationStatus.getStyleClass().add("validation-warning");
                         setBusy(false);
                     }
@@ -470,7 +472,7 @@ public final class ComponentsDialog {
         setBusy(true);
         operationStatus.setText(startingMessage);
         progressBar.setProgress(-1);
-        operationPercent.setText("Working…");
+        operationPercent.setText(tr("common.working"));
         thread.start();
     }
 
@@ -478,7 +480,7 @@ public final class ComponentsDialog {
         Thread thread = activeThread.get();
         if (thread != null) {
             thread.interrupt();
-            operationStatus.setText("Cancelling…");
+            operationStatus.setText(tr("components.cancelling"));
         }
     }
 
@@ -518,6 +520,14 @@ public final class ComponentsDialog {
             return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / (1024d * 1024d));
         }
         return String.format(java.util.Locale.ROOT, "%.1f GB", bytes / (1024d * 1024d * 1024d));
+    }
+
+    private static String profileName(WhisperModelProfile profile) {
+        return tr("model." + profile.id() + ".name");
+    }
+
+    private static String profileDescription(WhisperModelProfile profile) {
+        return tr("model." + profile.id() + ".description");
     }
 
     private record ComponentRow(

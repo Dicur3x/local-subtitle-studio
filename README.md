@@ -1,5 +1,7 @@
 # Local Subtitle Studio
 
+[Русская версия](README.ru.md)
+
 Local Subtitle Studio is a desktop application for creating subtitles from video while keeping media on the user's computer. The first supported platform is Windows.
 
 > Status: early MVP development. The current build can install its local toolchain and create an experimental original-language SRT locally from a selected video audio track.
@@ -22,13 +24,29 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - A five-stage creation progress bar with the real percentage reported by whisper.cpp during recognition.
 - Word-timestamp-aware splitting of long utterances, balanced line wrapping, and validation for overlaps, repeated text, line length, line count, and reading speed.
 - Configurable readability and timing limits in Advanced settings, with safe defaults and automatic migration of older settings files.
-- UTF-8 SRT export beside the source video; an existing subtitle file is never overwritten.
+- A visible readiness check for FFmpeg, whisper.cpp, the recognition model, and VAD before subtitle creation starts.
+- Conservative duplicate-cue cleanup plus low-confidence warnings for passages that need human review; recognized dialogue is never silently rewritten.
+- UTF-8 SRT export beside the source video, in a `Subs` folder, or in a chosen folder; an existing subtitle file is never overwritten.
+- English UI by default with an optional Russian translation, plus a minimal first-run guide.
+- Self-contained Windows app image and portable ZIP packaging; the user does not need to install Java or Gradle.
 - Cancellation of active inspection, audio-preparation, and transcription processes.
 - Automatic removal of temporary recognition audio after the operation.
 
 No media is uploaded. Cloud services are not used by the current build.
 
-## Requirements
+## Run as an ordinary user
+
+Use a packaged Windows build when one is attached to a private test release:
+
+1. Extract the app-image or portable ZIP.
+2. Start `Local Subtitle Studio.exe`.
+3. Choose the interface language and subtitle location in the first-run guide.
+4. Let the guide open **Components**, then install the recommended tools and a model.
+5. Choose a video, audio track, and spoken language, then select **Create original SRT**.
+
+The packaged application includes its own Java runtime. The normal app image stores settings and managed downloads below `%LOCALAPPDATA%\LocalSubtitleStudio`. The portable ZIP contains a `portable.mode` marker and stores them in `data` beside the launcher. Neither mode changes the system `PATH` or requires administrator rights.
+
+## Developer requirements
 
 - A JDK 17 or newer to start Gradle. The build pins its daemon/compiler/runtime to JDK 21 and can provision that toolchain automatically when it is missing.
 - Enough local disk space for the selected model (about 190 MB, 574 MB, or 3.1 GB) and temporary audio.
@@ -36,7 +54,7 @@ No media is uploaded. Cloud services are not used by the current build.
 
 FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. Existing executables on `PATH` or custom files chosen in **Advanced settings** remain supported.
 
-## Run
+## Run from IntelliJ IDEA or a terminal
 
 ```powershell
 .\gradlew.bat run
@@ -44,7 +62,19 @@ FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. E
 
 Open **Components** and choose **Set up recommended tools + model** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg + whisper.cpp** updates only those program components and preserves the selected model. Models remain separately selectable. The application never installs an update silently. Open **Advanced settings** only when you want to override a managed path or change the temporary directory.
 
-After choosing a video and audio track, leave **Spoken language** on **Auto detect** or select it manually, then press **Create original SRT**. The result is saved beside the video as `<video>.<language>.srt`. If that name already exists, a numbered file is created instead.
+After choosing a video and audio track, leave **Spoken language** on **Auto detect** or select it manually, then press **Create original SRT**. The output location is selected in **Advanced settings**. If the destination name already exists, a numbered file is created instead.
+
+Build a self-contained Windows app image:
+
+```powershell
+.\gradlew.bat packageAppImage
+```
+
+Build a portable ZIP whose settings, components, and models stay beside the app:
+
+```powershell
+.\gradlew.bat packagePortableZip
+```
 
 The status area shows preparation, recognition, timing, validation, and saving as separate stages. During recognition, the overall bar is driven by whisper.cpp's own progress callback. A completed file stays at 100%; validation warnings remain visible without discarding an otherwise usable SRT.
 
@@ -62,9 +92,20 @@ The larger WAV is short-lived working data. It is deleted when another track or 
 
 Whisper model files are immutable weights rather than applications with regular releases and changelogs. Local Subtitle Studio identifies each catalog entry by its exact filename, byte size, and SHA-256 checksum. When the recommended catalog profile changes, the Components screen can present the new profile; whisper.cpp itself has conventional release notes available from that screen.
 
-Silero VAD is installed with every managed model. It identifies speech boundaries and avoids sending long silent spans to recognition. Recognition requests full token timestamps from whisper.cpp, and the timing optimizer adds only a short tail after the last recognized word while keeping a gap before the next speech segment. This prevents a cue from being extended merely to meet the next sentence; changing to a larger recognition model alone cannot reliably correct timing.
+Silero VAD is installed with every managed model. It identifies speech boundaries and avoids sending long silent spans to recognition. In whisper.cpp 1.9.2, JSON segment offsets are on the original audio timeline while raw full-JSON token offsets can remain on the silence-compressed VAD timeline. Local Subtitle Studio detects that mismatch, treats segment offsets as authoritative, and projects token positions back into each original segment. This fixes the accumulated “subtitles run early” error seen on real material with opening silence or music.
 
 Long recognition segments are split at word-token boundaries before timing is optimized. The defaults target 42 characters per line, two lines, an 800 ms minimum duration, and a 20 characters/second warning threshold. These values, together with speech padding and the next-speech gap, can be adjusted in **Advanced settings**.
+
+## Mixed languages, translation, and voice-over
+
+These cases are deliberately not presented as finished one-click features yet:
+
+- For a mostly Russian track containing French dialogue, a fixed `ru` Whisper pass can turn French into Russian-looking phonetic hallucinations. A reliable mode needs speech-chunk language identification followed by language-specific recognition.
+- Two future outputs are specified: an “author intent” subtitle that omits foreign dialogue the original audience was not meant to understand, and an “all dialogue” subtitle that includes a translated foreign line. A safe label such as `[French]` is preferable as a baseline; italics remain an optional style.
+- whisper.cpp's built-in translation target is English, so French-to-Russian translation needs a separately managed local translation model or an explicit opt-in cloud provider. The application will not pretend that `--translate` can produce Russian.
+- MVO usually contains the Russian voice-over and quieter original speech mixed into the same samples. Stereo diarization or speaker-turn detection does not separate those sources. The default remains transcription of the selected target-language track. Reliable dual-language extraction will require a separately evaluated source-separation pipeline and should expose uncertainty rather than silently combining both voices.
+
+See [ADR 0005](docs/architecture/0005-multilingual-dialogue-and-voice-over.md) for the proposed modes, filenames, and acceptance criteria.
 
 ## Test
 

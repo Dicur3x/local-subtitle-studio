@@ -10,6 +10,7 @@ import io.github.dicur3x.lss.subtitles.PipelineProgress;
 import io.github.dicur3x.lss.subtitles.PipelineStage;
 import io.github.dicur3x.lss.subtitles.SpokenLanguage;
 import io.github.dicur3x.lss.subtitles.SubtitleCreationService;
+import io.github.dicur3x.lss.subtitles.SubtitleReadiness;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
@@ -50,6 +51,8 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static io.github.dicur3x.lss.ui.I18n.tr;
+
 public final class MainView implements AutoCloseable {
     private static final Logger LOGGER = Logger.getLogger(MainView.class.getName());
     private static final List<String> VIDEO_EXTENSIONS = List.of(
@@ -66,21 +69,22 @@ public final class MainView implements AutoCloseable {
     private final BorderPane root = new BorderPane();
     private final Label selectedFile = new Label();
     private final Label duration = new Label();
-    private final Label status = new Label("Ready");
+    private final Label status = new Label(tr("common.ready"));
     private final Label error = new Label();
     private final ProgressBar progress = new ProgressBar(0);
     private final Label progressPercent = new Label();
     private final Label progressStages = new Label();
     private final ScrollPane mainScrollPane = new ScrollPane();
-    private final Button cancelButton = new Button("Cancel");
-    private final Button componentsButton = new Button("Components");
-    private final Button settingsButton = new Button("Advanced settings");
-    private final Button createSubtitlesButton = new Button("Create original SRT");
-    private final Button prepareAudioButton = new Button("Prepare audio only");
+    private final Button cancelButton = new Button(tr("common.cancel"));
+    private final Button componentsButton = new Button(tr("main.components"));
+    private final Button settingsButton = new Button(tr("main.advancedSettings"));
+    private final Button createSubtitlesButton = new Button(tr("main.createSrt"));
+    private final Button prepareAudioButton = new Button(tr("main.prepareAudio"));
     private final ComboBox<AudioTrack> audioTracks = new ComboBox<>();
     private final ComboBox<SpokenLanguage> spokenLanguages = new ComboBox<>();
     private final VBox mediaDetails = new VBox(14);
     private final Label audioState = new Label();
+    private final Label readinessState = new Label();
     private volatile Future<?> activeTask;
     private final AtomicLong operationGeneration = new AtomicLong();
     private MediaInfo currentMedia;
@@ -109,18 +113,24 @@ public final class MainView implements AutoCloseable {
     private void buildView() {
         Label brand = new Label("LOCAL SUBTITLE STUDIO");
         brand.getStyleClass().add("brand");
-        Label heading = new Label("Create subtitles without uploading your video");
+        Label heading = new Label(tr("main.heading"));
         heading.getStyleClass().add("heading");
         heading.setWrapText(true);
-        Label intro = new Label("Drop one video below. We’ll inspect its audio tracks locally with ffprobe.");
+        Label intro = new Label(tr("main.intro"));
         intro.getStyleClass().add("muted");
         intro.setWrapText(true);
 
         VBox title = new VBox(8, brand, heading, intro);
         componentsButton.getStyleClass().add("primary-button");
-        componentsButton.setOnAction(event -> componentsAction.accept(componentsButton.getScene().getWindow()));
+        componentsButton.setOnAction(event -> {
+            componentsAction.accept(componentsButton.getScene().getWindow());
+            refreshReadiness();
+        });
         settingsButton.getStyleClass().add("quiet-button");
-        settingsButton.setOnAction(event -> settingsAction.accept(settingsButton.getScene().getWindow()));
+        settingsButton.setOnAction(event -> {
+            settingsAction.accept(settingsButton.getScene().getWindow());
+            refreshReadiness();
+        });
         HBox headerActions = new HBox(10, componentsButton, settingsButton);
         headerActions.setAlignment(Pos.CENTER_LEFT);
         VBox header = new VBox(16, title, headerActions);
@@ -151,11 +161,11 @@ public final class MainView implements AutoCloseable {
     private VBox createDropZone() {
         Label icon = new Label("＋");
         icon.getStyleClass().add("drop-icon");
-        Label title = new Label("Drop video file here");
+        Label title = new Label(tr("main.dropTitle"));
         title.getStyleClass().add("drop-title");
-        Label hint = new Label("MKV, MP4, MOV, AVI, WebM, TS and other ffprobe-compatible containers");
+        Label hint = new Label(tr("main.dropHint"));
         hint.getStyleClass().add("muted");
-        Button chooseFile = new Button("Choose video");
+        Button chooseFile = new Button(tr("main.chooseVideo"));
         chooseFile.getStyleClass().add("primary-button");
         chooseFile.setOnAction(event -> chooseVideo(chooseFile.getScene().getWindow()));
 
@@ -188,7 +198,7 @@ public final class MainView implements AutoCloseable {
         selectedFile.getStyleClass().add("file-name");
         duration.getStyleClass().add("muted");
 
-        Label audioLabel = new Label("Audio track");
+        Label audioLabel = new Label(tr("main.audioTrack"));
         audioLabel.getStyleClass().add("field-label");
         audioTracks.setMaxWidth(Double.MAX_VALUE);
         audioTracks.setButtonCell(createAudioCell());
@@ -197,21 +207,22 @@ public final class MainView implements AutoCloseable {
             if (preparedAudio != null && oldTrack != null && newTrack != null
                     && oldTrack.streamIndex() != newTrack.streamIndex()) {
                 closePreparedAudio();
-                audioState.setText("The selected track will be decoded to lossless 16 kHz mono PCM for whisper.cpp.");
-                prepareAudioButton.setText("Prepare audio only");
-                status.setText("Audio track changed");
+                audioState.setText(tr("main.audioDecodeHint"));
+                prepareAudioButton.setText(tr("main.prepareAudio"));
+                status.setText(tr("main.audioTrackChanged"));
             }
         });
 
-        Label languageLabel = new Label("Spoken language");
+        Label languageLabel = new Label(tr("main.spokenLanguage"));
         languageLabel.getStyleClass().add("field-label");
-        spokenLanguages.setItems(FXCollections.observableArrayList(SpokenLanguage.choices()));
-        spokenLanguages.getSelectionModel().select(SpokenLanguage.AUTO);
+        spokenLanguages.setItems(FXCollections.observableArrayList(SpokenLanguage.choices(I18n.locale())));
+        spokenLanguages.getSelectionModel().selectFirst();
         spokenLanguages.setMaxWidth(Double.MAX_VALUE);
 
-        audioState.setText("The selected track will be decoded to lossless 16 kHz mono PCM for whisper.cpp.");
+        audioState.setText(tr("main.audioDecodeHint"));
         audioState.getStyleClass().add("muted");
         audioState.setWrapText(true);
+        readinessState.setWrapText(true);
         createSubtitlesButton.getStyleClass().add("primary-button");
         createSubtitlesButton.setOnAction(event -> createSubtitles());
         prepareAudioButton.getStyleClass().add("quiet-button");
@@ -220,7 +231,7 @@ public final class MainView implements AutoCloseable {
         FlowPane buttons = new FlowPane(10, 10, createSubtitlesButton, prepareAudioButton);
         buttons.setAlignment(Pos.CENTER_LEFT);
         audioState.setMaxWidth(Double.MAX_VALUE);
-        VBox audioActionRow = new VBox(10, audioState, buttons);
+        VBox audioActionRow = new VBox(10, readinessState, audioState, buttons);
 
         mediaDetails.getChildren().setAll(
                 new HBox(12, selectedFile, spacer(), duration),
@@ -230,6 +241,7 @@ public final class MainView implements AutoCloseable {
         );
         mediaDetails.setPadding(new Insets(20));
         mediaDetails.getStyleClass().add("details-card");
+        refreshReadiness();
     }
 
     private HBox createStatusBar() {
@@ -268,10 +280,10 @@ public final class MainView implements AutoCloseable {
 
     private void chooseVideo(Window owner) {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Choose a video file");
+        chooser.setTitle(tr("main.chooseVideoTitle"));
         chooser.getExtensionFilters().setAll(
-                new FileChooser.ExtensionFilter("Video files", VIDEO_EXTENSIONS),
-                new FileChooser.ExtensionFilter("All files", "*.*")
+                new FileChooser.ExtensionFilter(tr("main.videoFiles"), VIDEO_EXTENSIONS),
+                new FileChooser.ExtensionFilter(tr("common.allFiles"), "*.*")
         );
         File file = chooser.showOpenDialog(owner);
         if (file != null) {
@@ -281,7 +293,7 @@ public final class MainView implements AutoCloseable {
 
     public void inspect(Path file) {
         if (!Files.isRegularFile(file)) {
-            showError("Drop a single readable video file.");
+            showError(tr("main.singleReadableVideo"));
             return;
         }
 
@@ -314,7 +326,7 @@ public final class MainView implements AutoCloseable {
         showIndeterminateProgress();
         cancelButton.setVisible(true);
         cancelButton.setManaged(true);
-        status.setText("Inspecting audio tracks…");
+        status.setText(tr("main.inspecting"));
         setControlsBusy(true);
     }
 
@@ -332,15 +344,14 @@ public final class MainView implements AutoCloseable {
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         error.setText("");
-        audioState.setText("The selected track will be decoded to lossless 16 kHz mono PCM for whisper.cpp.");
-        prepareAudioButton.setText("Prepare audio only");
+        audioState.setText(tr("main.audioDecodeHint"));
+        prepareAudioButton.setText(tr("main.prepareAudio"));
         setControlsBusy(false);
         createSubtitlesButton.setDisable(mediaInfo.audioTracks().isEmpty());
         prepareAudioButton.setDisable(mediaInfo.audioTracks().isEmpty());
         status.setText(mediaInfo.audioTracks().isEmpty()
-                ? "No audio tracks found"
-                : mediaInfo.audioTracks().size() + (mediaInfo.audioTracks().size() == 1
-                ? " audio track found" : " audio tracks found"));
+                ? tr("main.noAudioTracks")
+                : tr("main.audioTracksFound", mediaInfo.audioTracks().size()));
         Platform.runLater(() -> mainScrollPane.setVvalue(1));
         activeTask = null;
     }
@@ -349,7 +360,7 @@ public final class MainView implements AutoCloseable {
         MediaInfo media = currentMedia;
         AudioTrack selectedTrack = audioTracks.getSelectionModel().getSelectedItem();
         if (media == null || selectedTrack == null) {
-            showOperationError("Audio preparation failed", "Choose an audio track first.");
+            showOperationError(tr("main.audioPreparationFailed"), tr("main.chooseAudioFirst"));
             return;
         }
 
@@ -359,8 +370,8 @@ public final class MainView implements AutoCloseable {
         showIndeterminateProgress();
         cancelButton.setVisible(true);
         cancelButton.setManaged(true);
-        status.setText("Preparing 16 kHz mono PCM audio…");
-        audioState.setText("Decoding the selected track. The original video remains unchanged.");
+        status.setText(tr("main.preparingPcm"));
+        audioState.setText(tr("main.decodingOriginalSafe"));
         setControlsBusy(true);
 
         activeTask = worker.submit(() -> {
@@ -380,11 +391,11 @@ public final class MainView implements AutoCloseable {
                 }
             } catch (CancellationException ignored) {
                 runOnUiIfCurrent(operationId,
-                        () -> restoreMediaReadyState("Audio preparation cancelled"));
+                        () -> restoreMediaReadyState(tr("main.audioPreparationCancelled")));
             } catch (Exception exception) {
                 LOGGER.log(Level.SEVERE, "Audio preparation failed", exception);
                 runOnUiIfCurrent(operationId,
-                        () -> showOperationError("Audio preparation failed", exception.getMessage()));
+                        () -> showOperationError(tr("main.audioPreparationFailed"), exception.getMessage()));
             }
         });
     }
@@ -394,7 +405,13 @@ public final class MainView implements AutoCloseable {
         AudioTrack selectedTrack = audioTracks.getSelectionModel().getSelectedItem();
         SpokenLanguage selectedLanguage = spokenLanguages.getSelectionModel().getSelectedItem();
         if (media == null || selectedTrack == null || selectedLanguage == null) {
-            showOperationError("Subtitle creation failed", "Choose an audio track and spoken language first.");
+            showOperationError(tr("main.subtitleCreationFailed"), tr("main.chooseTrackLanguage"));
+            return;
+        }
+        SubtitleReadiness readiness = subtitleCreationService.readiness();
+        if (!readiness.ready()) {
+            refreshReadiness();
+            showOperationError(tr("main.setupRequired"), tr("main.openComponentsFirst"));
             return;
         }
 
@@ -402,11 +419,11 @@ public final class MainView implements AutoCloseable {
         closePreparedAudio();
         error.setText("");
         updatePipelineProgress(PipelineProgress.at(
-                PipelineStage.PREPARING_AUDIO, 0, "Preparing speech-recognition audio…"));
+                PipelineStage.PREPARING_AUDIO, 0, tr("main.preparingRecognitionAudio")));
         cancelButton.setVisible(true);
         cancelButton.setManaged(true);
-        status.setText("Starting subtitle creation…");
-        audioState.setText("The video stays on this computer. Recognition may take a while.");
+        status.setText(tr("main.startingCreation"));
+        audioState.setText(tr("main.localRecognitionHint"));
         setControlsBusy(true);
 
         activeTask = worker.submit(() -> {
@@ -418,25 +435,26 @@ public final class MainView implements AutoCloseable {
                                 operationId, () -> updatePipelineProgress(pipelineProgress)));
                 runOnUiIfCurrent(operationId, () -> showCreatedSubtitles(result));
             } catch (CancellationException ignored) {
-                runOnUiIfCurrent(operationId, () -> restoreMediaReadyState("Subtitle creation cancelled"));
+                runOnUiIfCurrent(operationId, () -> restoreMediaReadyState(tr("main.subtitleCreationCancelled")));
             } catch (Exception exception) {
                 LOGGER.log(Level.SEVERE, "Subtitle creation failed", exception);
                 runOnUiIfCurrent(operationId,
-                        () -> showOperationError("Subtitle creation failed", exception.getMessage()));
+                        () -> showOperationError(tr("main.subtitleCreationFailed"), exception.getMessage()));
             }
         });
     }
 
     private void showCreatedSubtitles(CreatedSubtitles result) {
-        updatePipelineProgress(PipelineProgress.complete("Original subtitles are ready"));
+        updatePipelineProgress(PipelineProgress.complete(tr("main.subtitlesReady")));
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         setControlsBusy(false);
-        audioState.setText("Saved beside the video: " + result.file().getFileName());
-        status.setText(String.format(Locale.ROOT, "Created %d subtitle cues · language: %s · %s",
-                result.cueCount(), result.language(), result.warnings().isEmpty()
-                        ? "checks passed" : result.warnings().size() + " warning(s)"));
-        showNotice(result.warnings().isEmpty() ? "" : "Check: " + String.join(" ", result.warnings()),
+        audioState.setText(tr("main.savedTo", result.file()));
+        status.setText(tr("main.createdSummary", result.cueCount(), result.language(),
+                result.warnings().isEmpty() ? tr("main.checksPassed")
+                        : tr("main.warningCount", result.warnings().size())));
+        showNotice(result.warnings().isEmpty() ? "" : tr("main.checkPrefix") + " "
+                        + String.join(" ", result.warnings()),
                 !result.warnings().isEmpty());
         activeTask = null;
     }
@@ -447,15 +465,14 @@ public final class MainView implements AutoCloseable {
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         setControlsBusy(false);
-        prepareAudioButton.setText("Prepare audio again");
+        prepareAudioButton.setText(tr("main.prepareAudioAgain"));
         try {
             audioState.setText(String.format(Locale.ROOT,
-                    "Audio ready: 16 kHz · mono · 16 bit PCM · %.1f MB temporary file",
-                    result.size() / (1024d * 1024d)));
+                    tr("main.audioReadySize"), result.size() / (1024d * 1024d)));
         } catch (IOException exception) {
-            audioState.setText("Audio ready: 16 kHz · mono · 16 bit PCM");
+            audioState.setText(tr("main.audioReady"));
         }
-        status.setText("Audio preparation complete");
+        status.setText(tr("main.audioPreparationComplete"));
         error.setText("");
         activeTask = null;
     }
@@ -465,7 +482,7 @@ public final class MainView implements AutoCloseable {
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
         setControlsBusy(false);
-        audioState.setText("The selected track will be decoded to lossless 16 kHz mono PCM for whisper.cpp.");
+        audioState.setText(tr("main.audioDecodeHint"));
         status.setText(message);
         activeTask = null;
     }
@@ -476,7 +493,7 @@ public final class MainView implements AutoCloseable {
         cancelButton.setManaged(false);
         setControlsBusy(false);
         status.setText(title);
-        showNotice(message == null || message.isBlank() ? "Unexpected operation error." : message, false);
+        showNotice(message == null || message.isBlank() ? tr("main.unexpectedOperationError") : message, false);
         activeTask = null;
     }
 
@@ -487,8 +504,8 @@ public final class MainView implements AutoCloseable {
         hideProgress();
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
-        status.setText("Could not inspect this file");
-        showNotice(message == null || message.isBlank() ? "Unexpected media inspection error." : message, false);
+        status.setText(tr("main.couldNotInspect"));
+        showNotice(message == null || message.isBlank() ? tr("main.unexpectedInspectionError") : message, false);
         setControlsBusy(false);
         mainScrollPane.setVvalue(0);
         activeTask = null;
@@ -501,11 +518,23 @@ public final class MainView implements AutoCloseable {
         if (audioTracks.getItems().isEmpty()) {
             mediaDetails.setVisible(false);
             mediaDetails.setManaged(false);
-            status.setText("Ready");
+            status.setText(tr("common.ready"));
             mainScrollPane.setVvalue(0);
         }
         setControlsBusy(false);
         activeTask = null;
+    }
+
+    public void refreshReadiness() {
+        SubtitleReadiness readiness = subtitleCreationService.readiness();
+        readinessState.getStyleClass().removeAll("validation-success", "validation-warning");
+        if (readiness.ready()) {
+            readinessState.setText(tr("main.readinessReady"));
+            readinessState.getStyleClass().add("validation-success");
+        } else {
+            readinessState.setText(tr("main.readinessMissing"));
+            readinessState.getStyleClass().add("validation-warning");
+        }
     }
 
     private long beginOperation() {
@@ -520,7 +549,7 @@ public final class MainView implements AutoCloseable {
         if (currentMedia == null) {
             showIdleState();
         } else {
-            restoreMediaReadyState("Operation cancelled");
+            restoreMediaReadyState(tr("main.operationCancelled"));
         }
     }
 
@@ -548,7 +577,7 @@ public final class MainView implements AutoCloseable {
         progress.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
         progress.setVisible(true);
         progress.setManaged(true);
-        progressPercent.setText("Working…");
+        progressPercent.setText(tr("common.working"));
         progressPercent.setVisible(true);
         progressPercent.setManaged(true);
         progressStages.setVisible(false);
@@ -593,13 +622,17 @@ public final class MainView implements AutoCloseable {
         );
         return displayed.stream().map(stage -> {
             if (current.stage() == PipelineStage.COMPLETE || stage.ordinal() < current.stage().ordinal()) {
-                return "✓ " + stage.displayName();
+                return "✓ " + stageName(stage);
             }
             if (stage == current.stage()) {
-                return "● " + stage.displayName() + " " + current.stagePercent() + "%";
+                return "● " + stageName(stage) + " " + current.stagePercent() + "%";
             }
-            return "○ " + stage.displayName();
+            return "○ " + stageName(stage);
         }).collect(java.util.stream.Collectors.joining("   "));
+    }
+
+    private static String stageName(PipelineStage stage) {
+        return tr("pipeline." + stage.name().toLowerCase(Locale.ROOT));
     }
 
     private void setControlsBusy(boolean busy) {

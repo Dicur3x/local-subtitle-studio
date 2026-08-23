@@ -25,6 +25,7 @@ public final class SubtitleValidator {
         int tooManyLines = 0;
         int tooFast = 0;
         int repeated = 0;
+        int lowConfidence = 0;
         SubtitleCue previous = null;
         for (int index = 0; index < safeCues.size(); index++) {
             SubtitleCue cue = safeCues.get(index);
@@ -52,6 +53,9 @@ public final class SubtitleValidator {
             if (previous != null && normalize(previous.originalText()).equals(normalize(cue.originalText()))) {
                 repeated++;
             }
+            if (hasLowConfidence(cue)) {
+                lowConfidence++;
+            }
             previous = cue;
         }
 
@@ -60,6 +64,7 @@ public final class SubtitleValidator {
         addCountWarning(warnings, tooManyLines, "cue(s) exceed the configured line count");
         addCountWarning(warnings, tooFast, "cue(s) may be too fast to read");
         addCountWarning(warnings, repeated, "adjacent cue(s) repeat the same text");
+        addCountWarning(warnings, lowConfidence, "cue(s) have low recognition confidence and should be reviewed");
         return new SubtitleValidationReport(warnings);
     }
 
@@ -71,5 +76,17 @@ public final class SubtitleValidator {
 
     private static String normalize(String text) {
         return text.replaceAll("\\s+", " ").strip().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static boolean hasLowConfidence(SubtitleCue cue) {
+        List<TokenTiming> lexicalTokens = cue.tokens().stream()
+                .filter(token -> !token.text().isBlank())
+                .toList();
+        if (lexicalTokens.size() < 2) {
+            return false;
+        }
+        double average = lexicalTokens.stream().mapToDouble(TokenTiming::probability).average().orElse(1d);
+        long veryUncertain = lexicalTokens.stream().filter(token -> token.probability() < 0.25d).count();
+        return average < 0.50d || veryUncertain >= 2;
     }
 }

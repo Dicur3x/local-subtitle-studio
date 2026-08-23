@@ -32,8 +32,32 @@ class WhisperJsonParserTest {
         assertEquals(1, result.segments().size());
         RecognizedSegment segment = result.segments().getFirst();
         assertEquals("Привет, мир!", segment.text());
-        assertEquals(Duration.ofMillis(1120), segment.speechStart());
-        assertEquals(Duration.ofMillis(1890), segment.speechEnd());
+        assertEquals(Duration.ofMillis(1000), segment.speechStart());
+        assertEquals(Duration.ofMillis(4000), segment.speechEnd());
         assertEquals(2, segment.tokens().size());
+    }
+
+    @Test
+    void remapsCompressedVadTokenTimesIntoOriginalSegmentTimeline() throws Exception {
+        String json = """
+                {
+                  "result": {"language": "ru"},
+                  "transcription": [{
+                    "offsets": {"from": 2350, "to": 3830},
+                    "text": "Эта работа пожирает меня.",
+                    "tokens": [
+                      {"text": " Эта", "offsets": {"from": 0, "to": 300}, "p": 0.95},
+                      {"text": " работа пожирает меня.", "offsets": {"from": 300, "to": 1480}, "p": 0.91}
+                    ]
+                  }]
+                }
+                """;
+
+        RecognizedSegment segment = new WhisperJsonParser(new ObjectMapper()).parse(json).segments().getFirst();
+
+        assertEquals(Duration.ofMillis(2350), segment.speechStart());
+        assertEquals(Duration.ofMillis(3830), segment.speechEnd());
+        assertEquals(Duration.ofMillis(2350), segment.tokens().getFirst().start());
+        assertEquals(Duration.ofMillis(3830), segment.tokens().getLast().end());
     }
 }

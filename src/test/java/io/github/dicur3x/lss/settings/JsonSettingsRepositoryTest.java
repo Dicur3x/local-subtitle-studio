@@ -34,7 +34,9 @@ class JsonSettingsRepositoryTest {
                 "",
                 "",
                 "C:\\Temp",
-                SubtitlePreferences.defaults()
+                SubtitlePreferences.defaults(),
+                OutputPreferences.defaults(),
+                UiLanguage.ENGLISH
         );
 
         repository.save(settings);
@@ -63,5 +65,6 @@ class JsonSettingsRepositoryTest {
 
         assertEquals(42, loaded.subtitlePreferences().maximumCharactersPerLine());
         assertEquals(2, loaded.subtitlePreferences().maximumLines());
+        assertEquals(OutputLocation.BESIDE_VIDEO, loaded.outputPreferences().location());
     }
 }

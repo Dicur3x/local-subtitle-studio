@@ -12,6 +12,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.function.BooleanSupplier;
@@ -33,6 +34,17 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
         this.settingsSupplier = Objects.requireNonNull(settingsSupplier, "settingsSupplier");
         this.processRunner = Objects.requireNonNull(processRunner, "processRunner");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+    }
+
+    @Override
+    public SubtitleReadiness readiness() {
+        ApplicationSettings settings = Objects.requireNonNull(settingsSupplier.get(), "current settings");
+        List<String> problems = new ArrayList<>();
+        checkExecutable(settings.ffmpegExecutable(), "FFmpeg", problems);
+        checkExecutable(settings.whisperExecutable(), "whisper.cpp", problems);
+        checkReadableFile(settings.whisperModel(), "Whisper model", problems);
+        checkReadableFile(settings.whisperVadModel(), "voice detection model", problems);
+        return new SubtitleReadiness(problems.isEmpty(), problems);
     }
 
     @Override
@@ -83,7 +95,8 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                 SubtitleTimingOptimizer timingOptimizer = new SubtitleTimingOptimizer(
                         settings.subtitlePreferences());
                 List<RecognizedSegment> segmented = segmenter.segment(result.segments());
-                List<SubtitleCue> cues = timingOptimizer.optimize(segmented);
+                List<SubtitleCue> cues = new SubtitlePostProcessor().process(
+                        timingOptimizer.optimize(segmented));
                 progress.accept(PipelineProgress.at(
                         PipelineStage.OPTIMIZING, 100, "Subtitle timing is ready"));
                 progress.accept(PipelineProgress.at(
@@ -95,7 +108,8 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                                 ? "Subtitle checks passed" : "Subtitle checks completed with warnings"));
                 progress.accept(PipelineProgress.at(
                         PipelineStage.WRITING, 0, "Saving SRT beside the video…"));
-                SrtWriter srtWriter = new SrtWriter(settings.subtitlePreferences());
+                SrtWriter srtWriter = new SrtWriter(
+                        settings.subtitlePreferences(), settings.outputPreferences());
                 Path output = srtWriter.write(mediaFile, result.language(), cues);
                 progress.accept(PipelineProgress.complete("Original subtitles are ready"));
                 return new CreatedSubtitles(
@@ -129,6 +143,36 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                     "The configured " + description + " is missing. Open Components and reinstall the model.");
         }
         return path;
+    }
+
+    private static void checkExecutable(String value, String description, List<String> problems) {
+        if (value == null || value.isBlank()) {
+            problems.add(description + " is not configured");
+            return;
+        }
+        if ((value.contains("\\") || value.contains("/"))) {
+            try {
+                if (!Files.isRegularFile(Path.of(value))) {
+                    problems.add(description + " executable is missing");
+                }
+            } catch (InvalidPathException exception) {
+                problems.add(description + " path is invalid");
+            }
+        }
+    }
+
+    private static void checkReadableFile(String value, String description, List<String> problems) {
+        if (value == null || value.isBlank()) {
+            problems.add(description + " is not installed");
+            return;
+        }
+        try {
+            if (!Files.isRegularFile(Path.of(value)) || !Files.isReadable(Path.of(value))) {
+                problems.add(description + " is missing");
+            }
+        } catch (InvalidPathException exception) {
+            problems.add(description + " path is invalid");
+        }
     }
 
     private static void throwIfCancelled(BooleanSupplier cancellationRequested) {

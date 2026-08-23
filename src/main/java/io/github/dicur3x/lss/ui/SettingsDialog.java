@@ -5,7 +5,10 @@ import io.github.dicur3x.lss.infrastructure.tools.ToolCheck;
 import io.github.dicur3x.lss.infrastructure.tools.ToolStatus;
 import io.github.dicur3x.lss.infrastructure.tools.ToolValidationReport;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
+import io.github.dicur3x.lss.settings.OutputLocation;
+import io.github.dicur3x.lss.settings.OutputPreferences;
 import io.github.dicur3x.lss.settings.SubtitlePreferences;
+import io.github.dicur3x.lss.settings.UiLanguage;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -13,6 +16,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
@@ -26,6 +30,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Window;
+import javafx.util.StringConverter;
 
 import java.io.File;
 import java.nio.file.InvalidPathException;
@@ -35,8 +40,10 @@ import java.util.Optional;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.github.dicur3x.lss.ui.I18n.tr;
+
 public final class SettingsDialog {
-    private static final ButtonType SAVE = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+    private static final ButtonType SAVE = new ButtonType(tr("common.save"), ButtonBar.ButtonData.OK_DONE);
 
     private final ExternalToolValidator toolValidator;
 
@@ -47,8 +54,8 @@ public final class SettingsDialog {
     public Optional<ApplicationSettings> showAndWait(Window owner, ApplicationSettings current) {
         Dialog<ApplicationSettings> dialog = new Dialog<>();
         dialog.initOwner(owner);
-        dialog.setTitle("Local Subtitle Studio advanced settings");
-        dialog.setHeaderText("Manual paths and local storage");
+        dialog.setTitle(tr("settings.title"));
+        dialog.setHeaderText(tr("settings.header"));
         dialog.setResizable(true);
         dialog.getDialogPane().getButtonTypes().addAll(SAVE, ButtonType.CANCEL);
         dialog.getDialogPane().setPrefWidth(820);
@@ -58,12 +65,33 @@ public final class SettingsDialog {
         ).toExternalForm());
         dialog.getDialogPane().getStyleClass().add("settings-dialog");
 
-        TextField ffmpeg = field(current.ffmpegExecutable(), "ffmpeg or full path to ffmpeg.exe");
-        TextField ffprobe = field(current.ffprobeExecutable(), "ffprobe or full path to ffprobe.exe");
-        TextField whisper = field(current.whisperExecutable(), "whisper-cli or full path to whisper-cli.exe");
-        TextField model = field(current.whisperModel(), "Not required until transcription is enabled");
-        TextField vadModel = field(current.whisperVadModel(), "Installed automatically with a managed model");
-        TextField temporaryDirectory = field(current.temporaryDirectory(), "Blank means the system temp directory");
+        TextField ffmpeg = field(current.ffmpegExecutable(), tr("settings.ffmpegPrompt"));
+        TextField ffprobe = field(current.ffprobeExecutable(), tr("settings.ffprobePrompt"));
+        TextField whisper = field(current.whisperExecutable(), tr("settings.whisperPrompt"));
+        TextField model = field(current.whisperModel(), tr("settings.modelPrompt"));
+        TextField vadModel = field(current.whisperVadModel(), tr("settings.vadPrompt"));
+        TextField temporaryDirectory = field(current.temporaryDirectory(), tr("settings.tempPrompt"));
+        ComboBox<UiLanguage> uiLanguage = new ComboBox<>();
+        uiLanguage.getItems().setAll(UiLanguage.values());
+        uiLanguage.getSelectionModel().select(current.uiLanguage());
+        uiLanguage.setMaxWidth(Double.MAX_VALUE);
+        ComboBox<OutputLocation> outputLocation = new ComboBox<>();
+        outputLocation.getItems().setAll(OutputLocation.values());
+        outputLocation.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(OutputLocation value) {
+                return value == null ? "" : tr("output." + value.name().toLowerCase(java.util.Locale.ROOT));
+            }
+
+            @Override
+            public OutputLocation fromString(String value) {
+                return outputLocation.getValue();
+            }
+        });
+        outputLocation.getSelectionModel().select(current.outputPreferences().location());
+        outputLocation.setMaxWidth(Double.MAX_VALUE);
+        TextField outputDirectory = field(current.outputPreferences().customDirectory(),
+                tr("settings.outputPrompt"));
         SubtitlePreferences currentSubtitles = current.subtitlePreferences();
         Spinner<Integer> charactersPerLine = integerSpinner(
                 10, 100, currentSubtitles.maximumCharactersPerLine(), 1);
@@ -89,12 +117,28 @@ public final class SettingsDialog {
         fieldColumn.setHgrow(Priority.ALWAYS);
         grid.getColumnConstraints().addAll(labelColumn, fieldColumn);
 
-        addExecutableRow(grid, 0, "FFmpeg", ffmpeg, dialog, "Choose ffmpeg executable");
-        addExecutableRow(grid, 1, "FFprobe", ffprobe, dialog, "Choose ffprobe executable");
-        addExecutableRow(grid, 2, "whisper.cpp CLI", whisper, dialog, "Choose whisper-cli executable");
-        addFileRow(grid, 3, "Whisper model", model, dialog, "Choose Whisper model", "Whisper model", "*.bin");
-        addFileRow(grid, 4, "VAD model", vadModel, dialog, "Choose VAD model", "VAD model", "*.bin");
-        addDirectoryRow(grid, 5, "Temporary files", temporaryDirectory, dialog);
+        addExecutableRow(grid, 0, "FFmpeg", ffmpeg, dialog, tr("settings.chooseFfmpeg"));
+        addExecutableRow(grid, 1, "FFprobe", ffprobe, dialog, tr("settings.chooseFfprobe"));
+        addExecutableRow(grid, 2, "whisper.cpp CLI", whisper, dialog, tr("settings.chooseWhisper"));
+        addFileRow(grid, 3, tr("settings.whisperModel"), model, dialog, tr("settings.chooseModel"), tr("settings.whisperModel"), "*.bin");
+        addFileRow(grid, 4, tr("settings.vadModel"), vadModel, dialog, tr("settings.chooseVad"), tr("settings.vadModel"), "*.bin");
+        addDirectoryRow(grid, 5, tr("settings.temporaryFiles"), temporaryDirectory, dialog);
+        grid.add(new Label(tr("settings.interfaceLanguage")), 0, 6);
+        grid.add(uiLanguage, 1, 6);
+
+        GridPane outputGrid = new GridPane();
+        outputGrid.setHgap(12);
+        outputGrid.setVgap(10);
+        ColumnConstraints outputLabelColumn = new ColumnConstraints();
+        outputLabelColumn.setMinWidth(250);
+        ColumnConstraints outputFieldColumn = new ColumnConstraints();
+        outputFieldColumn.setHgrow(Priority.ALWAYS);
+        outputGrid.getColumnConstraints().addAll(outputLabelColumn, outputFieldColumn);
+        outputGrid.add(new Label(tr("settings.saveSubtitles")), 0, 0);
+        outputGrid.add(outputLocation, 1, 0);
+        addDirectoryRow(outputGrid, 1, tr("settings.chosenFolder"), outputDirectory, dialog);
+        outputDirectory.disableProperty().bind(outputLocation.valueProperty()
+                .isNotEqualTo(OutputLocation.CUSTOM_FOLDER));
 
         GridPane subtitleGrid = new GridPane();
         subtitleGrid.setHgap(12);
@@ -102,35 +146,29 @@ public final class SettingsDialog {
         ColumnConstraints subtitleLabelColumn = new ColumnConstraints();
         subtitleLabelColumn.setMinWidth(250);
         subtitleGrid.getColumnConstraints().addAll(subtitleLabelColumn, new ColumnConstraints());
-        addSpinnerRow(subtitleGrid, 0, "Maximum characters per line", charactersPerLine);
-        addSpinnerRow(subtitleGrid, 1, "Maximum lines per subtitle", maximumLines);
-        addSpinnerRow(subtitleGrid, 2, "Minimum subtitle duration (ms)", minimumDuration);
-        addSpinnerRow(subtitleGrid, 3, "Start padding before speech (ms)", startPadding);
-        addSpinnerRow(subtitleGrid, 4, "End padding after speech (ms)", endPadding);
-        addSpinnerRow(subtitleGrid, 5, "Gap before next speech (ms)", speechGap);
-        addSpinnerRow(subtitleGrid, 6, "Reading-speed warning (characters/sec)", maximumCps);
+        addSpinnerRow(subtitleGrid, 0, tr("settings.maxChars"), charactersPerLine);
+        addSpinnerRow(subtitleGrid, 1, tr("settings.maxLines"), maximumLines);
+        addSpinnerRow(subtitleGrid, 2, tr("settings.minDuration"), minimumDuration);
+        addSpinnerRow(subtitleGrid, 3, tr("settings.startPadding"), startPadding);
+        addSpinnerRow(subtitleGrid, 4, tr("settings.endPadding"), endPadding);
+        addSpinnerRow(subtitleGrid, 5, tr("settings.nextGap"), speechGap);
+        addSpinnerRow(subtitleGrid, 6, tr("settings.readingSpeed"), maximumCps);
 
-        Label explanation = new Label(
-                "Managed components apply their paths automatically. Use this screen only to override them with "
-                        + "your own files or change the temporary folder. The original video is never modified."
-        );
+        Label explanation = new Label(tr("settings.explanation"));
         explanation.setWrapText(true);
         explanation.getStyleClass().add("muted");
 
-        Label subtitleHeading = new Label("Subtitle readability and timing");
+        Label subtitleHeading = new Label(tr("settings.subtitleHeading"));
         subtitleHeading.getStyleClass().add("section-title");
-        Label subtitleExplanation = new Label(
-                "The defaults create up to two balanced lines and keep subtitles close to actual speech. "
-                        + "Change these only for a specific delivery standard."
-        );
+        Label subtitleExplanation = new Label(tr("settings.subtitleExplanation"));
         subtitleExplanation.setWrapText(true);
         subtitleExplanation.getStyleClass().add("muted");
 
-        Label validationResult = new Label("Paths have not been checked yet.");
+        Label validationResult = new Label(tr("settings.notChecked"));
         validationResult.setWrapText(true);
         validationResult.setMinHeight(112);
         validationResult.getStyleClass().add("validation-result");
-        Button validate = new Button("Check tools");
+        Button validate = new Button(tr("settings.checkTools"));
         validate.getStyleClass().add("quiet-button");
         AtomicReference<Thread> validationThread = new AtomicReference<>();
         validate.setOnAction(event -> {
@@ -139,7 +177,7 @@ public final class SettingsDialog {
                 previous.interrupt();
             }
             validate.setDisable(true);
-            validationResult.setText("Checking tools…");
+            validationResult.setText(tr("settings.checkingTools"));
             ApplicationSettings candidate = values(ffmpeg, ffprobe, whisper, model, vadModel,
                     temporaryDirectory, subtitlePreferences(charactersPerLine, maximumLines,
                             minimumDuration, startPadding, endPadding, speechGap, maximumCps));
@@ -163,7 +201,14 @@ public final class SettingsDialog {
 
         HBox validationHeader = new HBox(12, validate);
         validationHeader.setAlignment(Pos.CENTER_LEFT);
-        VBox content = new VBox(16, explanation, grid, new Separator(), subtitleHeading,
+        Label outputHeading = new Label(tr("settings.outputHeading"));
+        outputHeading.getStyleClass().add("section-title");
+        Label outputExplanation = new Label(tr("settings.outputExplanation"));
+        outputExplanation.setWrapText(true);
+        outputExplanation.getStyleClass().add("muted");
+
+        VBox content = new VBox(16, explanation, grid, new Separator(), outputHeading,
+                outputExplanation, outputGrid, new Separator(), subtitleHeading,
                 subtitleExplanation, subtitleGrid, validationHeader, validationResult);
         content.setPadding(new Insets(8, 4, 4, 4));
         ScrollPane scrollPane = new ScrollPane(content);
@@ -176,7 +221,9 @@ public final class SettingsDialog {
         dialog.setResultConverter(button -> button == SAVE
                 ? values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
                         subtitlePreferences(charactersPerLine, maximumLines, minimumDuration,
-                                startPadding, endPadding, speechGap, maximumCps))
+                                startPadding, endPadding, speechGap, maximumCps),
+                        new OutputPreferences(outputLocation.getValue(), outputDirectory.getText()),
+                        uiLanguage.getValue())
                 : null);
         dialog.setOnHidden(event -> {
             Thread thread = validationThread.get();
@@ -225,7 +272,7 @@ public final class SettingsDialog {
             Dialog<?> dialog,
             String title
     ) {
-        addFileRow(grid, row, label, field, dialog, title, "Executable", "*.exe");
+        addFileRow(grid, row, label, field, dialog, title, tr("settings.executable"), "*.exe");
     }
 
     private static void addFileRow(
@@ -238,14 +285,14 @@ public final class SettingsDialog {
             String filterName,
             String filterPattern
     ) {
-        Button browse = new Button("Browse…");
+        Button browse = new Button(tr("common.browse"));
         browse.getStyleClass().add("quiet-button");
         browse.setOnAction(event -> {
             FileChooser chooser = new FileChooser();
             chooser.setTitle(title);
             chooser.getExtensionFilters().setAll(
                     new FileChooser.ExtensionFilter(filterName, filterPattern),
-                    new FileChooser.ExtensionFilter("All files", "*.*")
+                    new FileChooser.ExtensionFilter(tr("common.allFiles"), "*.*")
             );
             setInitialDirectory(chooser, field.getText());
             File selected = chooser.showOpenDialog(dialog.getDialogPane().getScene().getWindow());
@@ -266,11 +313,11 @@ public final class SettingsDialog {
             TextField field,
             Dialog<?> dialog
     ) {
-        Button browse = new Button("Browse…");
+        Button browse = new Button(tr("common.browse"));
         browse.getStyleClass().add("quiet-button");
         browse.setOnAction(event -> {
             DirectoryChooser chooser = new DirectoryChooser();
-            chooser.setTitle("Choose temporary files directory");
+            chooser.setTitle(tr("settings.chooseDirectory"));
             setInitialDirectory(chooser, field.getText());
             File selected = chooser.showDialog(dialog.getDialogPane().getScene().getWindow());
             if (selected != null) {
@@ -309,6 +356,21 @@ public final class SettingsDialog {
             TextField temporaryDirectory,
             SubtitlePreferences subtitlePreferences
     ) {
+        return values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
+                subtitlePreferences, OutputPreferences.defaults(), UiLanguage.ENGLISH);
+    }
+
+    private static ApplicationSettings values(
+            TextField ffmpeg,
+            TextField ffprobe,
+            TextField whisper,
+            TextField model,
+            TextField vadModel,
+            TextField temporaryDirectory,
+            SubtitlePreferences subtitlePreferences,
+            OutputPreferences outputPreferences,
+            UiLanguage uiLanguage
+    ) {
         return new ApplicationSettings(
                 ApplicationSettings.CURRENT_SCHEMA_VERSION,
                 ffmpeg.getText(),
@@ -317,7 +379,9 @@ public final class SettingsDialog {
                 model.getText(),
                 vadModel.getText(),
                 temporaryDirectory.getText(),
-                subtitlePreferences
+                subtitlePreferences,
+                outputPreferences,
+                uiLanguage
         );
     }
 

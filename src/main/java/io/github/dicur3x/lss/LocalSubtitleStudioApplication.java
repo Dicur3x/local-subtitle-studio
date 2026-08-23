@@ -25,6 +25,8 @@ import io.github.dicur3x.lss.subtitles.WhisperSubtitleCreationService;
 import io.github.dicur3x.lss.ui.MainView;
 import io.github.dicur3x.lss.ui.ComponentsDialog;
 import io.github.dicur3x.lss.ui.SettingsDialog;
+import io.github.dicur3x.lss.ui.I18n;
+import io.github.dicur3x.lss.ui.FirstRunDialog;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -33,10 +35,13 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import java.nio.file.InvalidPathException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static io.github.dicur3x.lss.ui.I18n.tr;
 
 public final class LocalSubtitleStudioApplication extends Application {
     private static final Logger LOGGER = Logger.getLogger(LocalSubtitleStudioApplication.class.getName());
@@ -45,6 +50,8 @@ public final class LocalSubtitleStudioApplication extends Application {
     private ExternalProcessRunner processRunner;
     private ManagedToolsService managedToolsService;
     private String startupSettingsWarning;
+    private boolean firstRun;
+    private boolean openComponentsAfterStart;
 
     public static void main(String[] args) {
         Thread.setDefaultUncaughtExceptionHandler((thread, exception) ->
@@ -56,6 +63,10 @@ public final class LocalSubtitleStudioApplication extends Application {
     public void start(Stage stage) {
         processRunner = new DefaultExternalProcessRunner();
         settingsManager = loadSettings();
+        if (firstRun) {
+            runFirstSetup();
+        }
+        I18n.use(settingsManager.current().uiLanguage());
         managedToolsService = createManagedToolsService();
         MediaProbe mediaProbe = (file, cancellationRequested) ->
                 new FfprobeMediaProbe(settingsManager.current().ffprobeExecutable(), processRunner)
@@ -82,15 +93,20 @@ public final class LocalSubtitleStudioApplication extends Application {
         stage.setMinHeight(600);
         stage.setScene(scene);
         stage.show();
+        if (openComponentsAfterStart) {
+            Platform.runLater(() -> showComponents(stage));
+        }
         if (startupSettingsWarning != null) {
             Platform.runLater(() -> showAlert(stage, Alert.AlertType.WARNING,
-                    "Settings could not be loaded", startupSettingsWarning));
+                    tr("app.settingsLoadFailed"), startupSettingsWarning));
         }
         inspectInitialFileArgument();
     }
 
     private SettingsManager loadSettings() {
-        var repository = new JsonSettingsRepository(SettingsPaths.defaultSettingsFile(), new ObjectMapper());
+        Path settingsFile = SettingsPaths.defaultSettingsFile();
+        firstRun = !Files.exists(settingsFile);
+        var repository = new JsonSettingsRepository(settingsFile, new ObjectMapper());
         try {
             return new SettingsManager(repository);
         } catch (SettingsException exception) {
@@ -99,6 +115,19 @@ public final class LocalSubtitleStudioApplication extends Application {
                     + "the correct tool paths. The existing settings file was not overwritten.";
             return new SettingsManager(repository, ApplicationSettings.defaults());
         }
+    }
+
+    private void runFirstSetup() {
+        new FirstRunDialog().showAndWait().ifPresent(result -> {
+            try {
+                settingsManager.save(settingsManager.current().withOnboarding(
+                        result.uiLanguage(), result.outputPreferences()));
+                openComponentsAfterStart = result.openComponents();
+            } catch (SettingsException exception) {
+                LOGGER.log(Level.WARNING, "Could not save first-run settings", exception);
+                startupSettingsWarning = exception.getMessage();
+            }
+        });
     }
 
     private ManagedToolsService createManagedToolsService() {
@@ -121,16 +150,24 @@ public final class LocalSubtitleStudioApplication extends Application {
     private void showComponents(Window owner) {
         new ComponentsDialog(managedToolsService, url -> getHostServices().showDocument(url))
                 .showAndWait(owner);
+        if (mainView != null) {
+            mainView.refreshReadiness();
+        }
     }
 
     private void showSettings(Window owner) {
         SettingsDialog dialog = new SettingsDialog(new ExternalToolValidator(processRunner));
+        var previousLanguage = settingsManager.current().uiLanguage();
         dialog.showAndWait(owner, settingsManager.current()).ifPresent(settings -> {
             try {
                 settingsManager.save(settings);
+                if (settings.uiLanguage() != previousLanguage) {
+                    showAlert(owner, Alert.AlertType.INFORMATION,
+                            tr("app.languageSaved"), tr("app.restartForLanguage"));
+                }
             } catch (SettingsException exception) {
                 LOGGER.log(Level.SEVERE, "Could not save application settings", exception);
-                showAlert(owner, Alert.AlertType.ERROR, "Settings were not saved", exception.getMessage());
+                showAlert(owner, Alert.AlertType.ERROR, tr("app.settingsNotSaved"), exception.getMessage());
             }
         });
     }

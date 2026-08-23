@@ -14,9 +14,11 @@ import javafx.stage.Window;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+import static io.github.dicur3x.lss.ui.I18n.tr;
+
 final class ReleaseNotesDialog {
     private static final ButtonType OFFICIAL_SOURCE = new ButtonType(
-            "View on official source", ButtonBar.ButtonData.LEFT);
+            tr("releaseNotes.officialSource"), ButtonBar.ButtonData.LEFT);
 
     private final Consumer<String> openLink;
 
@@ -27,7 +29,7 @@ final class ReleaseNotesDialog {
     void showAndWait(Window owner, ComponentRelease release) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.initOwner(owner);
-        dialog.setTitle(release.component().displayName() + " release notes");
+        dialog.setTitle(tr("releaseNotes.title", release.component().displayName()));
         dialog.setHeaderText(release.component().displayName() + " " + release.version());
         dialog.setResizable(true);
         dialog.getDialogPane().getButtonTypes().addAll(OFFICIAL_SOURCE, ButtonType.CLOSE);
@@ -36,9 +38,7 @@ final class ReleaseNotesDialog {
                 getClass().getResource("/io/github/dicur3x/lss/app.css"), "app.css").toExternalForm());
         dialog.getDialogPane().getStyleClass().addAll("settings-dialog", "release-notes-dialog");
 
-        Label explanation = new Label(
-                "Changes published by the component's upstream project. The text is shown locally after a version check."
-        );
+        Label explanation = new Label(tr("releaseNotes.explanation"));
         explanation.setWrapText(true);
         explanation.getStyleClass().add("muted");
 

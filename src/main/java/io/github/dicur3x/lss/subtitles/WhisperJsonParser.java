@@ -48,11 +48,14 @@ public final class WhisperJsonParser {
             }
             long segmentStart = nonNegative(segment.path("offsets").path("from").asLong(-1));
             long segmentEnd = nonNegative(segment.path("offsets").path("to").asLong(-1));
-            List<TokenTiming> tokens = parseTokens(segment.path("tokens"));
-            long speechStart = tokens.stream().mapToLong(token -> token.start().toMillis()).min()
-                    .orElse(segmentStart);
-            long speechEnd = tokens.stream().mapToLong(token -> token.end().toMillis()).max()
-                    .orElse(segmentEnd);
+            List<TokenTiming> tokens = reconcileTokenTimeline(
+                    parseTokens(segment.path("tokens")), segmentStart, segmentEnd);
+            long speechStart = segmentStart;
+            long speechEnd = segmentEnd;
+            if (speechStart < 0 || speechEnd <= speechStart) {
+                speechStart = tokens.stream().mapToLong(token -> token.start().toMillis()).min().orElse(-1);
+                speechEnd = tokens.stream().mapToLong(token -> token.end().toMillis()).max().orElse(-1);
+            }
             if (speechStart < 0 || speechEnd <= speechStart) {
                 continue;
             }
@@ -79,6 +82,56 @@ public final class WhisperJsonParser {
                     token.path("p").asDouble(0)));
         }
         return List.copyOf(tokens);
+    }
+
+    /**
+     * whisper.cpp 1.9.2 maps segment offsets back to the original audio after VAD removes silence,
+     * while full-JSON token offsets can still use the compressed VAD timeline. Detect that mismatch
+     * and project token positions into the authoritative segment interval.
+     */
+    private static List<TokenTiming> reconcileTokenTimeline(
+            List<TokenTiming> tokens,
+            long segmentStart,
+            long segmentEnd
+    ) {
+        if (tokens.isEmpty() || segmentStart < 0 || segmentEnd <= segmentStart) {
+            return tokens;
+        }
+        long tokenStart = tokens.stream().mapToLong(token -> token.start().toMillis()).min().orElse(-1);
+        long tokenEnd = tokens.stream().mapToLong(token -> token.end().toMillis()).max().orElse(-1);
+        if (tokenStart < 0 || tokenEnd <= tokenStart) {
+            return tokens;
+        }
+        boolean compressedVadTimeline = tokenStart < segmentStart - 100 || tokenEnd > segmentEnd + 100;
+        if (!compressedVadTimeline) {
+            return tokens;
+        }
+
+        long tokenSpan = tokenEnd - tokenStart;
+        long segmentSpan = segmentEnd - segmentStart;
+        List<TokenTiming> mapped = new ArrayList<>(tokens.size());
+        for (TokenTiming token : tokens) {
+            long mappedStart = project(
+                    token.start().toMillis(), tokenStart, tokenSpan, segmentStart, segmentSpan);
+            long mappedEnd = project(
+                    token.end().toMillis(), tokenStart, tokenSpan, segmentStart, segmentSpan);
+            mappedEnd = Math.max(mappedStart, mappedEnd);
+            mapped.add(new TokenTiming(
+                    token.text(), Duration.ofMillis(mappedStart), Duration.ofMillis(mappedEnd),
+                    token.probability()));
+        }
+        return List.copyOf(mapped);
+    }
+
+    private static long project(
+            long value,
+            long sourceStart,
+            long sourceSpan,
+            long destinationStart,
+            long destinationSpan
+    ) {
+        double ratio = (value - sourceStart) / (double) sourceSpan;
+        return destinationStart + Math.round(Math.max(0d, Math.min(1d, ratio)) * destinationSpan);
     }
 
     private static boolean isSpecialToken(String text) {
