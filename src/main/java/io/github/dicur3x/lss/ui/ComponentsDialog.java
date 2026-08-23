@@ -58,6 +58,8 @@ public final class ComponentsDialog {
     private final Label modelDescription = new Label();
     private final Label modelStatus = new Label();
     private final Button installModel = new Button(tr("components.installModel"));
+    private boolean recommendedSetupComplete;
+    private boolean versionsChecked;
 
     public ComponentsDialog(ManagedToolsService toolsService, Consumer<String> openLink) {
         this.toolsService = Objects.requireNonNull(toolsService, "toolsService");
@@ -70,7 +72,8 @@ public final class ComponentsDialog {
         dialog.setTitle(tr("components.title"));
         dialog.setHeaderText(tr("components.header"));
         dialog.setResizable(true);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().getButtonTypes().add(
+                new ButtonType(tr("common.close"), javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE));
         dialog.getDialogPane().setPrefSize(860, 650);
         dialog.getDialogPane().getStylesheets().add(Objects.requireNonNull(
                 getClass().getResource("/io/github/dicur3x/lss/app.css"), "app.css").toExternalForm());
@@ -208,18 +211,23 @@ public final class ComponentsDialog {
     }
 
     private void loadLocalState() {
+        boolean programsInstalled = true;
         for (ManagedComponent component : ManagedComponent.values()) {
             try {
                 Optional<InstalledComponent> installed = toolsService.current(component);
+                programsInstalled &= installed.isPresent();
                 rows.get(component).status().setText(installed
                         .map(value -> tr("components.managedInstalled", value.version()))
                         .orElse(tr("components.notManaged")));
             } catch (Exception exception) {
+                programsInstalled = false;
                 rows.get(component).status().setText(exception.getMessage());
             }
         }
+        boolean modelInstalled = false;
         try {
             Optional<InstalledModelBundle> current = toolsService.currentModel();
+            modelInstalled = current.isPresent();
             if (current.isPresent()) {
                 WhisperModelProfile profile = current.orElseThrow().profile();
                 modelProfiles.getSelectionModel().select(profile);
@@ -230,7 +238,10 @@ public final class ComponentsDialog {
         } catch (Exception exception) {
             modelStatus.setText(exception.getMessage());
         }
+        recommendedSetupComplete = programsInstalled && modelInstalled;
+        versionsChecked = false;
         updateModelChoice();
+        updateActionAvailability(false);
     }
 
     private void checkAllComponents() {
@@ -267,6 +278,7 @@ public final class ComponentsDialog {
                     operationStatus.setText(failures == 0
                             ? tr("components.checkComplete")
                             : tr("components.sourceErrors", failures));
+                    versionsChecked = failures == 0;
                 }
         );
     }
@@ -277,7 +289,7 @@ public final class ComponentsDialog {
                 ? tr("components.notDetected") : check.configuredVersion();
         String status = tr("components.versionStatus", configured, check.latestRelease().version());
         if (!check.updateAvailable()) {
-            status += tr("components.upToDateSuffix");
+            status += " " + tr("components.upToDateSuffix");
         }
         installAvailable.put(check.component(), check.updateAvailable());
         row.status().setText(status);
@@ -301,6 +313,7 @@ public final class ComponentsDialog {
                     row.status().setText(tr("components.managedActive", installed.version()));
                     installAvailable.put(component, false);
                     operationStatus.setText(tr("components.componentReady", component.displayName()));
+                    refreshRecommendedSetupState();
                 }
         );
     }
@@ -332,6 +345,8 @@ public final class ComponentsDialog {
                     modelProfiles.getSelectionModel().select(WhisperModelProfile.BALANCED);
                     modelStatus.setText(tr("components.modelInstalled", profileName(WhisperModelProfile.BALANCED)));
                     operationStatus.setText(tr("components.recommendedReady"));
+                    recommendedSetupComplete = true;
+                    versionsChecked = false;
                 }
         );
     }
@@ -373,13 +388,17 @@ public final class ComponentsDialog {
                     });
                     result.errors().forEach((component, message) -> rows.get(component).status().setText(message));
                     if (!result.errors().isEmpty()) {
+                        versionsChecked = false;
                         operationStatus.setText(tr("components.someUpdateFailed"));
                         operationStatus.getStyleClass().add("validation-warning");
                     } else if (result.components().isEmpty()) {
+                        versionsChecked = true;
                         operationStatus.setText(tr("components.alreadyCurrent"));
                     } else {
+                        versionsChecked = true;
                         operationStatus.setText(tr("components.programsUpdated"));
                     }
+                    refreshRecommendedSetupState();
                 }
         );
     }
@@ -396,6 +415,7 @@ public final class ComponentsDialog {
                     modelStatus.setText(tr("components.modelInstalledApplied", profileName(profile)));
                     installModel.setDisable(true);
                     operationStatus.setText(tr("components.recognitionReady"));
+                    refreshRecommendedSetupState();
                 }
         );
     }
@@ -429,10 +449,46 @@ public final class ComponentsDialog {
             operationPercent.setText(total > 0
                     ? Math.min(100, Math.max(0, Math.round(completed * 100f / total))) + "%"
                     : tr("common.working"));
+            String localizedPhase = localizedProgressPhase(phase);
             operationStatus.setText(total > 0
-                    ? phase + " · " + formatSize(completed) + " / " + formatSize(total)
-                    : phase + " · " + formatSize(completed));
+                    ? localizedPhase + " · " + formatSize(completed) + " / " + formatSize(total)
+                    : localizedPhase + " · " + formatSize(completed));
         });
+    }
+
+    private static String localizedProgressPhase(String phase) {
+        if (phase == null || phase.isBlank()) {
+            return tr("common.working");
+        }
+        if (phase.equals("Model and voice detection are ready")) {
+            return tr("components.phaseModelReady");
+        }
+        if (phase.endsWith(" (already verified)")) {
+            return tr("components.phaseAlreadyVerified", localizedProgressPhase(
+                    phase.substring(0, phase.length() - " (already verified)".length())));
+        }
+        if (phase.startsWith("Downloading ")) {
+            return tr("components.phaseDownloading", localizedProgressTarget(
+                    phase.substring("Downloading ".length())));
+        }
+        if (phase.startsWith("Checking and unpacking ")) {
+            return tr("components.phaseChecking", localizedProgressTarget(
+                    phase.substring("Checking and unpacking ".length())));
+        }
+        if (phase.endsWith(" is ready")) {
+            return tr("components.phaseReady", localizedProgressTarget(
+                    phase.substring(0, phase.length() - " is ready".length())));
+        }
+        return phase;
+    }
+
+    private static String localizedProgressTarget(String target) {
+        for (WhisperModelProfile profile : WhisperModelProfile.values()) {
+            if (profile.displayName().equals(target)) {
+                return profileName(profile);
+            }
+        }
+        return target;
     }
 
     private <T> void runTask(String startingMessage, Callable<T> task, Consumer<T> success) {
@@ -485,9 +541,7 @@ public final class ComponentsDialog {
     }
 
     private void setBusy(boolean busy) {
-        setupRecommended.setDisable(busy);
-        updateComponents.setDisable(busy);
-        checkUpdates.setDisable(busy);
+        updateActionAvailability(busy);
         rows.forEach((component, row) -> {
             row.install().setDisable(busy || !Boolean.TRUE.equals(installAvailable.get(component)));
             row.notes().setDisable(busy || !latestReleases.containsKey(component));
@@ -506,6 +560,28 @@ public final class ComponentsDialog {
         operationPercent.setManaged(busy);
     }
 
+    private void updateActionAvailability(boolean busy) {
+        setupRecommended.setDisable(busy || recommendedSetupComplete);
+        updateComponents.setDisable(busy || !versionsChecked || !hasProgramUpdate());
+        checkUpdates.setDisable(busy);
+    }
+
+    private boolean hasProgramUpdate() {
+        return installAvailable.values().stream().anyMatch(Boolean.TRUE::equals);
+    }
+
+    private void refreshRecommendedSetupState() {
+        try {
+            boolean programsInstalled = true;
+            for (ManagedComponent component : ManagedComponent.values()) {
+                programsInstalled &= toolsService.current(component).isPresent();
+            }
+            recommendedSetupComplete = programsInstalled && toolsService.currentModel().isPresent();
+        } catch (Exception exception) {
+            recommendedSetupComplete = false;
+        }
+    }
+
     private static Region spacer() {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -514,12 +590,12 @@ public final class ComponentsDialog {
 
     private static String formatSize(long bytes) {
         if (bytes < 1024 * 1024) {
-            return String.format(java.util.Locale.ROOT, "%.0f KB", bytes / 1024d);
+            return String.format(java.util.Locale.ROOT, "%.0f %s", bytes / 1024d, tr("unit.kb"));
         }
         if (bytes < 1024L * 1024 * 1024) {
-            return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / (1024d * 1024d));
+            return String.format(java.util.Locale.ROOT, "%.1f %s", bytes / (1024d * 1024d), tr("unit.mb"));
         }
-        return String.format(java.util.Locale.ROOT, "%.1f GB", bytes / (1024d * 1024d * 1024d));
+        return String.format(java.util.Locale.ROOT, "%.1f %s", bytes / (1024d * 1024d * 1024d), tr("unit.gb"));
     }
 
     private static String profileName(WhisperModelProfile profile) {

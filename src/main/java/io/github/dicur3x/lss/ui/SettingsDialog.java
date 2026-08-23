@@ -43,8 +43,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static io.github.dicur3x.lss.ui.I18n.tr;
 
 public final class SettingsDialog {
-    private static final ButtonType SAVE = new ButtonType(tr("common.save"), ButtonBar.ButtonData.OK_DONE);
-
     private final ExternalToolValidator toolValidator;
 
     public SettingsDialog(ExternalToolValidator toolValidator) {
@@ -57,7 +55,9 @@ public final class SettingsDialog {
         dialog.setTitle(tr("settings.title"));
         dialog.setHeaderText(tr("settings.header"));
         dialog.setResizable(true);
-        dialog.getDialogPane().getButtonTypes().addAll(SAVE, ButtonType.CANCEL);
+        ButtonType save = new ButtonType(tr("common.save"), ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancel = new ButtonType(tr("common.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
+        dialog.getDialogPane().getButtonTypes().addAll(save, cancel);
         dialog.getDialogPane().setPrefWidth(820);
         dialog.getDialogPane().getStylesheets().add(Objects.requireNonNull(
                 getClass().getResource("/io/github/dicur3x/lss/app.css"),
@@ -218,7 +218,7 @@ public final class SettingsDialog {
         scrollPane.getStyleClass().add("components-scroll");
         dialog.getDialogPane().setContent(scrollPane);
 
-        dialog.setResultConverter(button -> button == SAVE
+        dialog.setResultConverter(button -> button == save
                 ? values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
                         subtitlePreferences(charactersPerLine, maximumLines, minimumDuration,
                                 startPadding, endPadding, speechGap, maximumCps),
@@ -421,8 +421,8 @@ public final class SettingsDialog {
             if (text.length() > 0) {
                 text.append(System.lineSeparator());
             }
-            text.append(symbol(check.status())).append(' ').append(check.name()).append(": ")
-                    .append(check.details());
+            text.append(symbol(check.status())).append(' ').append(localizedToolName(check.name())).append(": ")
+                    .append(localizedToolDetails(check.details()));
         }
         return text.toString();
     }
@@ -432,6 +432,35 @@ public final class SettingsDialog {
             case AVAILABLE -> "✓";
             case NOT_CONFIGURED -> "—";
             case ERROR -> "!";
+        };
+    }
+
+    private static String localizedToolName(String name) {
+        return switch (name) {
+            case "Whisper model" -> tr("tool.whisperModel");
+            case "VAD model" -> tr("tool.vadModel");
+            case "Temporary directory" -> tr("tool.temporaryDirectory");
+            default -> name;
+        };
+    }
+
+    private static String localizedToolDetails(String details) {
+        if (details == null || details.isBlank()) {
+            return "";
+        }
+        return switch (details) {
+            case "Path is not configured" -> tr("tool.pathNotConfigured");
+            case "Not needed until transcription is enabled" -> tr("tool.notNeededYet");
+            case "Installed automatically with a managed model" -> tr("tool.installedWithModel");
+            case "File cannot be read" -> tr("tool.fileUnreadable");
+            case "Path is invalid" -> tr("tool.pathInvalid");
+            case "System temporary directory" -> tr("tool.systemTemporaryDirectory");
+            case "Directory does not exist or is not writable" -> tr("tool.directoryUnwritable");
+            case "Not found or cannot be started" -> tr("tool.notFound");
+            case "Available" -> tr("tool.available");
+            default -> details.startsWith("Exited with code ")
+                    ? tr("tool.exitCode", details.substring("Exited with code ".length()))
+                    : details;
         };
     }
 }

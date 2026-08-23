@@ -58,11 +58,14 @@ class WhisperSubtitleCreationServiceTest {
                 new ObjectMapper());
 
         List<PipelineProgress> progress = new ArrayList<>();
-        CreatedSubtitles created = service.create(video, 3, () -> false, progress::add);
+        CreatedSubtitles created = service.create(
+                video, 3, "ru", DialogueAudioMode.MIXED_VOICE_OVER, () -> false, progress::add);
 
         assertEquals("episode.ru.srt", created.file().getFileName().toString());
         assertEquals("ru", created.language());
         assertEquals(1, created.cueCount());
+        assertTrue(created.warnings().stream()
+                .anyMatch(warning -> warning.type() == SubtitleWarningType.MIXED_VOICE_OVER));
         assertTrue(Files.readString(created.file()).contains("00:00:00,950 --> 00:00:04,200"));
         assertEquals(PipelineStage.PREPARING_AUDIO, progress.getFirst().stage());
         assertEquals(PipelineStage.COMPLETE, progress.getLast().stage());
@@ -71,7 +74,7 @@ class WhisperSubtitleCreationServiceTest {
         assertTrue(progress.stream().anyMatch(value -> value.stage() == PipelineStage.VALIDATING));
         assertEquals(2, commands.size());
         assertTrue(commands.getFirst().contains("0:3"));
-        assertEquals("auto", commands.getLast().get(commands.getLast().indexOf("--language") + 1));
+        assertEquals("ru", commands.getLast().get(commands.getLast().indexOf("--language") + 1));
         try (var children = Files.list(workingRoot)) {
             assertFalse(children.findAny().isPresent());
         }

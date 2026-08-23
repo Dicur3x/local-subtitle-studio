@@ -13,6 +13,7 @@ public interface SubtitleCreationService {
             Path mediaFile,
             int audioStreamIndex,
             String spokenLanguage,
+            DialogueAudioMode audioMode,
             BooleanSupplier cancellationRequested,
             Consumer<PipelineProgress> progress
     ) throws SubtitleCreationException;
@@ -20,9 +21,21 @@ public interface SubtitleCreationService {
     default CreatedSubtitles create(
             Path mediaFile,
             int audioStreamIndex,
+            String spokenLanguage,
             BooleanSupplier cancellationRequested,
             Consumer<PipelineProgress> progress
     ) throws SubtitleCreationException {
-        return create(mediaFile, audioStreamIndex, SpokenLanguage.AUTO.code(), cancellationRequested, progress);
+        return create(mediaFile, audioStreamIndex, spokenLanguage, DialogueAudioMode.STANDARD,
+                cancellationRequested, progress);
+    }
+
+    default CreatedSubtitles create(
+            Path mediaFile,
+            int audioStreamIndex,
+            BooleanSupplier cancellationRequested,
+            Consumer<PipelineProgress> progress
+    ) throws SubtitleCreationException {
+        return create(mediaFile, audioStreamIndex, SpokenLanguage.AUTO.code(), DialogueAudioMode.STANDARD,
+                cancellationRequested, progress);
     }
 }

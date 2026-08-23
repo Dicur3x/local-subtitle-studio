@@ -62,7 +62,7 @@ public final class ExternalToolValidator {
             }
             String version = firstNonBlankLine(result.standardOutput(), result.standardError());
             return new ToolCheck(name, ToolStatus.AVAILABLE, requiredNow,
-                    version.isBlank() ? "Available" : conciseVersion(version));
+                    "whisper.cpp".equals(name) || version.isBlank() ? "Available" : conciseVersion(version));
         } catch (CancellationException exception) {
             throw exception;
         } catch (InterruptedException exception) {

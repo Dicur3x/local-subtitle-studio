@@ -1,6 +1,8 @@
 package io.github.dicur3x.lss.subtitles;
 
 import java.util.Arrays;
+import java.text.Collator;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -13,6 +15,10 @@ public record SpokenLanguage(String code, String displayName) {
             gl mr pa si km sn yo so af oc ka be tg sd gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg
             as tt haw ln ha ba jw su yue
             """;
+    private static final List<String> POPULAR_ORDER = List.of(
+            "en", "ru", "zh", "es", "fr", "de", "pt", "ar", "hi", "ja", "ko", "tr",
+            "it", "pl", "uk", "nl", "id", "vi", "th", "sv", "cs", "ro", "el", "he", "fa"
+    );
 
     public static final SpokenLanguage AUTO = new SpokenLanguage("auto", "Auto detect (recommended)");
     private static final List<SpokenLanguage> SUPPORTED = createSupported();
@@ -33,11 +39,21 @@ public record SpokenLanguage(String code, String displayName) {
         Locale safeLocale = Objects.requireNonNullElse(displayLocale, Locale.ENGLISH);
         String autoName = "ru".equals(safeLocale.getLanguage())
                 ? "Определить автоматически (рекомендуется)" : AUTO.displayName;
+        Collator collator = Collator.getInstance(safeLocale);
+        collator.setStrength(Collator.PRIMARY);
+        Comparator<SpokenLanguage> ordering = Comparator
+                .comparingInt((SpokenLanguage language) -> {
+                    int position = POPULAR_ORDER.indexOf(language.code());
+                    return position < 0 ? Integer.MAX_VALUE : position;
+                })
+                .thenComparing(SpokenLanguage::displayName, collator);
+        List<SpokenLanguage> languages = Arrays.stream(SUPPORTED_CODES.split("\\s+"))
+                .filter(code -> !code.isBlank())
+                .map(code -> fromCode(code, safeLocale))
+                .sorted(ordering)
+                .toList();
         return java.util.stream.Stream.concat(
-                java.util.stream.Stream.of(new SpokenLanguage(AUTO.code, autoName)),
-                Arrays.stream(SUPPORTED_CODES.split("\\s+"))
-                        .filter(code -> !code.isBlank())
-                        .map(code -> fromCode(code, safeLocale)))
+                java.util.stream.Stream.of(new SpokenLanguage(AUTO.code, autoName)), languages.stream())
                 .toList();
     }
 

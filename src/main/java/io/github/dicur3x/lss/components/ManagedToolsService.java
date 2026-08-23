@@ -24,6 +24,8 @@ public final class ManagedToolsService {
             "(?im)^ffmpeg version\\s+([^\\s]+)");
     private static final Pattern WHISPER_VERSION = Pattern.compile(
             "(?im)(?:whisper(?:\\.cpp)?\\s+)?version[:\\s]+v?([0-9]+(?:\\.[0-9]+){1,3})");
+    private static final Pattern VERSION_NUMBER = Pattern.compile(
+            "(?i)(?:^|[^0-9])v?([0-9]+(?:\\.[0-9]+){1,3})(?=$|[^0-9])");
 
     private final Map<ManagedComponent, ComponentReleaseProvider> releaseProviders;
     private final ManagedComponentStore componentStore;
@@ -144,8 +146,9 @@ public final class ManagedToolsService {
         }
     }
 
-    private static String normalizeVersion(String version) {
-        String normalized = version.strip().toLowerCase();
-        return normalized.startsWith("v") ? normalized.substring(1) : normalized;
+    static String normalizeVersion(String version) {
+        String normalized = version == null ? "" : version.strip().toLowerCase();
+        var matcher = VERSION_NUMBER.matcher(normalized);
+        return matcher.find() ? matcher.group(1) : normalized;
     }
 }

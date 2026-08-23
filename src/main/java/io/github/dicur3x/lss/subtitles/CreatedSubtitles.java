@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
-public record CreatedSubtitles(Path file, String language, int cueCount, List<String> warnings) {
+public record CreatedSubtitles(Path file, String language, int cueCount, List<SubtitleWarning> warnings) {
     public CreatedSubtitles {
         file = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
         language = Objects.requireNonNull(language, "language").strip();

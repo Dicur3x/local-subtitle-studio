@@ -59,18 +59,22 @@ public final class SubtitleValidator {
             previous = cue;
         }
 
-        List<String> warnings = new ArrayList<>();
-        addCountWarning(warnings, longLines, "cue(s) contain a line longer than the configured limit");
-        addCountWarning(warnings, tooManyLines, "cue(s) exceed the configured line count");
-        addCountWarning(warnings, tooFast, "cue(s) may be too fast to read");
-        addCountWarning(warnings, repeated, "adjacent cue(s) repeat the same text");
-        addCountWarning(warnings, lowConfidence, "cue(s) have low recognition confidence and should be reviewed");
+        List<SubtitleWarning> warnings = new ArrayList<>();
+        addCountWarning(warnings, longLines, SubtitleWarningType.LONG_LINE);
+        addCountWarning(warnings, tooManyLines, SubtitleWarningType.TOO_MANY_LINES);
+        addCountWarning(warnings, tooFast, SubtitleWarningType.TOO_FAST);
+        addCountWarning(warnings, repeated, SubtitleWarningType.REPEATED_TEXT);
+        addCountWarning(warnings, lowConfidence, SubtitleWarningType.LOW_CONFIDENCE);
         return new SubtitleValidationReport(warnings);
     }
 
-    private static void addCountWarning(List<String> warnings, int count, String message) {
+    private static void addCountWarning(
+            List<SubtitleWarning> warnings,
+            int count,
+            SubtitleWarningType type
+    ) {
         if (count > 0) {
-            warnings.add(count + " " + message + ".");
+            warnings.add(new SubtitleWarning(type, count));
         }
     }
 

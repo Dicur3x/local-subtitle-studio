@@ -127,6 +127,36 @@
     -fx-background-color: #344263;
 }
 
+.combo-box-popup .language-separator {
+    -fx-text-fill: #7f8aa0;
+    -fx-font-size: 11px;
+    -fx-background-color: #1a2130;
+}
+
+.language-search {
+    -fx-background-color: #111620;
+    -fx-background-radius: 7px;
+    -fx-border-color: #3b465b;
+    -fx-border-radius: 7px;
+    -fx-text-fill: #e8ecf3;
+    -fx-prompt-text-fill: #737e91;
+}
+
+.check-box {
+    -fx-text-fill: #e6eaf1;
+}
+
+.check-box > .box {
+    -fx-background-color: #111620;
+    -fx-background-radius: 4px;
+    -fx-border-color: #46516a;
+    -fx-border-radius: 4px;
+}
+
+.check-box:selected > .box > .mark {
+    -fx-background-color: #8ba4ff;
+}
+
 .progress-bar {
     -fx-accent: #8ba4ff;
 }

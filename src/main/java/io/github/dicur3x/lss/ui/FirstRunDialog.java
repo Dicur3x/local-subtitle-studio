@@ -24,7 +24,8 @@ public final class FirstRunDialog {
         Dialog<Result> dialog = new Dialog<>();
         dialog.setTitle("Welcome / Добро пожаловать");
         dialog.setHeaderText("Local Subtitle Studio");
-        dialog.getDialogPane().getButtonTypes().addAll(CONTINUE, ButtonType.CANCEL);
+        ButtonType cancel = new ButtonType("Cancel / Отмена", ButtonBar.ButtonData.CANCEL_CLOSE);
+        dialog.getDialogPane().getButtonTypes().addAll(CONTINUE, cancel);
         dialog.getDialogPane().setPrefWidth(610);
         dialog.getDialogPane().getStylesheets().add(Objects.requireNonNull(
                 getClass().getResource("/io/github/dicur3x/lss/app.css"), "app.css").toExternalForm());

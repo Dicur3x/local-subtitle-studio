@@ -41,7 +41,8 @@ class SubtitleValidatorTest {
 
         SubtitleValidationReport report = new SubtitleValidator(preferences).validate(List.of(uncertain));
 
-        assertTrue(report.warnings().stream().anyMatch(text -> text.contains("low recognition confidence")));
+        assertTrue(report.warnings().stream()
+                .anyMatch(warning -> warning.type() == SubtitleWarningType.LOW_CONFIDENCE));
     }
 
     private static SubtitleCue cue(long id, long start, long end, String text) {

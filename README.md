@@ -28,7 +28,7 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - Conservative duplicate-cue cleanup plus low-confidence warnings for passages that need human review; recognized dialogue is never silently rewritten.
 - UTF-8 SRT export beside the source video, in a `Subs` folder, or in a chosen folder; an existing subtitle file is never overwritten.
 - English UI by default with an optional Russian translation, plus a minimal first-run guide.
-- Self-contained Windows app image and portable ZIP packaging; the user does not need to install Java or Gradle.
+- Internal tasks for a self-contained Windows app image and portable ZIP are prepared, but no user build is published before broader testing.
 - Cancellation of active inspection, audio-preparation, and transcription processes.
 - Automatic removal of temporary recognition audio after the operation.
 
@@ -36,15 +36,15 @@ No media is uploaded. Cloud services are not used by the current build.
 
 ## Run as an ordinary user
 
-Use a packaged Windows build when one is attached to a private test release:
+When a tested Windows build is eventually attached to a private test release:
 
 1. Extract the app-image or portable ZIP.
 2. Start `Local Subtitle Studio.exe`.
 3. Choose the interface language and subtitle location in the first-run guide.
 4. Let the guide open **Components**, then install the recommended tools and a model.
-5. Choose a video, audio track, and spoken language, then select **Create original SRT**.
+5. Choose a video, audio track, and spoken language, then select **Create SRT**.
 
-The packaged application includes its own Java runtime. The normal app image stores settings and managed downloads below `%LOCALAPPDATA%\LocalSubtitleStudio`. The portable ZIP contains a `portable.mode` marker and stores them in `data` beside the launcher. Neither mode changes the system `PATH` or requires administrator rights.
+There is no end-user release yet; for now, run the project from IntelliJ IDEA or Gradle. The planned packaged application includes its own Java runtime. The normal app image stores settings and managed downloads below `%LOCALAPPDATA%\LocalSubtitleStudio`. The portable ZIP contains a `portable.mode` marker and stores them in `data` beside the launcher. Neither mode changes the system `PATH` or requires administrator rights.
 
 ## Developer requirements
 
@@ -62,7 +62,7 @@ FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. E
 
 Open **Components** and choose **Set up recommended tools + model** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg + whisper.cpp** updates only those program components and preserves the selected model. Models remain separately selectable. The application never installs an update silently. Open **Advanced settings** only when you want to override a managed path or change the temporary directory.
 
-After choosing a video and audio track, leave **Spoken language** on **Auto detect** or select it manually, then press **Create original SRT**. The output location is selected in **Advanced settings**. If the destination name already exists, a numbered file is created instead.
+After choosing a video and audio track, leave **Spoken language** on **Auto detect** or select it manually, then press **Create SRT**. The output location is selected in **Advanced settings**. If the destination name already exists, a numbered file is created instead.
 
 Build a self-contained Windows app image:
 
@@ -96,6 +96,10 @@ Silero VAD is installed with every managed model. It identifies speech boundarie
 
 Long recognition segments are split at word-token boundaries before timing is optimized. The defaults target 42 characters per line, two lines, an 800 ms minimum duration, and a 20 characters/second warning threshold. These values, together with speech padding and the next-speech gap, can be adjusted in **Advanced settings**.
 
+## Recognition correction
+
+Deterministic cleanup currently fixes spacing, line breaks, and close exact duplicates, then flags low-confidence cues. Repairing names, terminology, and contextually broken phrases needs a separate local language model. The planned optional stage uses `llama.cpp`, neighbouring cues, Whisper confidence, and a user glossary. It must return reviewable structured suggestions, retain the original transcript and edit log, and never change timestamps. See [ADR 0007](docs/architecture/0007-contextual-subtitle-correction.md).
+
 ## Mixed languages, translation, and voice-over
 
 These cases are deliberately not presented as finished one-click features yet:
@@ -103,7 +107,7 @@ These cases are deliberately not presented as finished one-click features yet:
 - For a mostly Russian track containing French dialogue, a fixed `ru` Whisper pass can turn French into Russian-looking phonetic hallucinations. A reliable mode needs speech-chunk language identification followed by language-specific recognition.
 - Two future outputs are specified: an “author intent” subtitle that omits foreign dialogue the original audience was not meant to understand, and an “all dialogue” subtitle that includes a translated foreign line. A safe label such as `[French]` is preferable as a baseline; italics remain an optional style.
 - whisper.cpp's built-in translation target is English, so French-to-Russian translation needs a separately managed local translation model or an explicit opt-in cloud provider. The application will not pretend that `--translate` can produce Russian.
-- MVO usually contains the Russian voice-over and quieter original speech mixed into the same samples. Stereo diarization or speaker-turn detection does not separate those sources. The default remains transcription of the selected target-language track. Reliable dual-language extraction will require a separately evaluated source-separation pipeline and should expose uncertainty rather than silently combining both voices.
+- The UI now has an experimental mixed-voice-over switch. It requires an explicit target language so an English opening cannot make automatic detection select the wrong language for the whole file, and it marks the result for review. It does not yet separate the quieter original from the voice-over: both are already mixed into the same samples. Reliable dual-language extraction requires a separately evaluated source-separation pipeline and visible uncertainty.
 
 See [ADR 0005](docs/architecture/0005-multilingual-dialogue-and-voice-over.md) for the proposed modes, filenames, and acceptance criteria.
 

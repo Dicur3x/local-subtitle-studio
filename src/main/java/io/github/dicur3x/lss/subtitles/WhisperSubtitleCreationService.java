@@ -52,9 +52,11 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
             Path mediaFile,
             int audioStreamIndex,
             String spokenLanguage,
+            DialogueAudioMode audioMode,
             BooleanSupplier cancellationRequested,
             Consumer<PipelineProgress> progress
     ) throws SubtitleCreationException {
+        Objects.requireNonNull(audioMode, "audioMode");
         Objects.requireNonNull(cancellationRequested, "cancellationRequested");
         Objects.requireNonNull(progress, "progress");
         ApplicationSettings settings = Objects.requireNonNull(settingsSupplier.get(), "current settings");
@@ -103,6 +105,10 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                         PipelineStage.VALIDATING, 0, "Checking subtitle readability and timing…"));
                 SubtitleValidationReport validation = new SubtitleValidator(
                         settings.subtitlePreferences()).validate(cues);
+                List<SubtitleWarning> warnings = new ArrayList<>(validation.warnings());
+                if (audioMode == DialogueAudioMode.MIXED_VOICE_OVER) {
+                    warnings.add(new SubtitleWarning(SubtitleWarningType.MIXED_VOICE_OVER, 1));
+                }
                 progress.accept(PipelineProgress.at(
                         PipelineStage.VALIDATING, 100, validation.passedWithoutWarnings()
                                 ? "Subtitle checks passed" : "Subtitle checks completed with warnings"));
@@ -111,9 +117,9 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                 SrtWriter srtWriter = new SrtWriter(
                         settings.subtitlePreferences(), settings.outputPreferences());
                 Path output = srtWriter.write(mediaFile, result.language(), cues);
-                progress.accept(PipelineProgress.complete("Original subtitles are ready"));
+                progress.accept(PipelineProgress.complete("Subtitles are ready"));
                 return new CreatedSubtitles(
-                        output, result.language(), cues.size(), validation.warnings());
+                        output, result.language(), cues.size(), warnings);
             } finally {
                 try {
                     audio.close();

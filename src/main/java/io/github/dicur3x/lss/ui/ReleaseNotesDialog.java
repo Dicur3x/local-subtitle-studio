@@ -32,7 +32,8 @@ final class ReleaseNotesDialog {
         dialog.setTitle(tr("releaseNotes.title", release.component().displayName()));
         dialog.setHeaderText(release.component().displayName() + " " + release.version());
         dialog.setResizable(true);
-        dialog.getDialogPane().getButtonTypes().addAll(OFFICIAL_SOURCE, ButtonType.CLOSE);
+        ButtonType close = new ButtonType(tr("common.close"), ButtonBar.ButtonData.CANCEL_CLOSE);
+        dialog.getDialogPane().getButtonTypes().addAll(OFFICIAL_SOURCE, close);
         dialog.getDialogPane().setPrefSize(760, 560);
         dialog.getDialogPane().getStylesheets().add(Objects.requireNonNull(
                 getClass().getResource("/io/github/dicur3x/lss/app.css"), "app.css").toExternalForm());

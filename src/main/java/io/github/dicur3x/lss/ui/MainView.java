@@ -6,22 +6,27 @@ import io.github.dicur3x.lss.media.MediaProbe;
 import io.github.dicur3x.lss.media.model.AudioTrack;
 import io.github.dicur3x.lss.media.model.MediaInfo;
 import io.github.dicur3x.lss.subtitles.CreatedSubtitles;
+import io.github.dicur3x.lss.subtitles.DialogueAudioMode;
 import io.github.dicur3x.lss.subtitles.PipelineProgress;
 import io.github.dicur3x.lss.subtitles.PipelineStage;
 import io.github.dicur3x.lss.subtitles.SpokenLanguage;
 import io.github.dicur3x.lss.subtitles.SubtitleCreationService;
 import io.github.dicur3x.lss.subtitles.SubtitleReadiness;
+import io.github.dicur3x.lss.subtitles.SubtitleWarning;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
@@ -39,6 +44,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -56,7 +62,9 @@ import static io.github.dicur3x.lss.ui.I18n.tr;
 public final class MainView implements AutoCloseable {
     private static final Logger LOGGER = Logger.getLogger(MainView.class.getName());
     private static final List<String> VIDEO_EXTENSIONS = List.of(
-            "*.mkv", "*.mp4", "*.m4v", "*.mov", "*.avi", "*.webm", "*.ts", "*.mts", "*.m2ts"
+            "*.mkv", "*.mp4", "*.m4v", "*.mov", "*.avi", "*.webm", "*.mpeg", "*.mpg",
+            "*.ts", "*.mts", "*.m2ts", "*.vob", "*.wmv", "*.asf", "*.flv", "*.ogv",
+            "*.3gp", "*.3g2", "*.mxf"
     );
 
     private final MediaProbe mediaProbe;
@@ -82,6 +90,10 @@ public final class MainView implements AutoCloseable {
     private final Button prepareAudioButton = new Button(tr("main.prepareAudio"));
     private final ComboBox<AudioTrack> audioTracks = new ComboBox<>();
     private final ComboBox<SpokenLanguage> spokenLanguages = new ComboBox<>();
+    private final TextField languageSearch = new TextField();
+    private final CheckBox voiceOverMode = new CheckBox(tr("main.voiceOverMode"));
+    private final SpokenLanguage languageSeparator = new SpokenLanguage("separator", tr("main.otherLanguages"));
+    private final List<SpokenLanguage> languageChoices = SpokenLanguage.choices(I18n.locale());
     private final VBox mediaDetails = new VBox(14);
     private final Label audioState = new Label();
     private final Label readinessState = new Label();
@@ -89,6 +101,7 @@ public final class MainView implements AutoCloseable {
     private final AtomicLong operationGeneration = new AtomicLong();
     private MediaInfo currentMedia;
     private PreparedAudio preparedAudio;
+    private boolean updatingLanguageChoices;
 
     public MainView(
             MediaProbe mediaProbe,
@@ -215,9 +228,14 @@ public final class MainView implements AutoCloseable {
 
         Label languageLabel = new Label(tr("main.spokenLanguage"));
         languageLabel.getStyleClass().add("field-label");
-        spokenLanguages.setItems(FXCollections.observableArrayList(SpokenLanguage.choices(I18n.locale())));
-        spokenLanguages.getSelectionModel().selectFirst();
-        spokenLanguages.setMaxWidth(Double.MAX_VALUE);
+        configureLanguagePicker();
+        HBox languageControls = new HBox(10, spokenLanguages, languageSearch);
+        HBox.setHgrow(spokenLanguages, Priority.ALWAYS);
+
+        voiceOverMode.setWrapText(true);
+        Label voiceOverHint = new Label(tr("main.voiceOverHint"));
+        voiceOverHint.setWrapText(true);
+        voiceOverHint.getStyleClass().add("muted");
 
         audioState.setText(tr("main.audioDecodeHint"));
         audioState.getStyleClass().add("muted");
@@ -225,8 +243,10 @@ public final class MainView implements AutoCloseable {
         readinessState.setWrapText(true);
         createSubtitlesButton.getStyleClass().add("primary-button");
         createSubtitlesButton.setOnAction(event -> createSubtitles());
+        createSubtitlesButton.setTooltip(new Tooltip(tr("main.createSrtTooltip")));
         prepareAudioButton.getStyleClass().add("quiet-button");
         prepareAudioButton.setOnAction(event -> prepareSelectedAudio());
+        prepareAudioButton.setTooltip(new Tooltip(tr("main.prepareAudioTooltip")));
 
         FlowPane buttons = new FlowPane(10, 10, createSubtitlesButton, prepareAudioButton);
         buttons.setAlignment(Pos.CENTER_LEFT);
@@ -236,7 +256,8 @@ public final class MainView implements AutoCloseable {
         mediaDetails.getChildren().setAll(
                 new HBox(12, selectedFile, spacer(), duration),
                 new VBox(7, audioLabel, audioTracks),
-                new VBox(7, languageLabel, spokenLanguages),
+                new VBox(7, languageLabel, languageControls),
+                new VBox(5, voiceOverMode, voiceOverHint),
                 audioActionRow
         );
         mediaDetails.setPadding(new Insets(20));
@@ -270,6 +291,110 @@ public final class MainView implements AutoCloseable {
                 setText(empty || item == null ? null : trackFormatter.format(item));
             }
         };
+    }
+
+    private void configureLanguagePicker() {
+        spokenLanguages.setItems(FXCollections.observableArrayList(languageChoicesWithSeparator()));
+        spokenLanguages.setButtonCell(createLanguageCell());
+        spokenLanguages.setCellFactory(listView -> createLanguageCell());
+        spokenLanguages.setVisibleRowCount(14);
+        spokenLanguages.getSelectionModel().selectFirst();
+        spokenLanguages.setMaxWidth(Double.MAX_VALUE);
+        spokenLanguages.setMinWidth(310);
+
+        languageSearch.setPromptText(tr("main.languageSearch"));
+        languageSearch.setPrefWidth(190);
+        languageSearch.getStyleClass().add("language-search");
+        languageSearch.textProperty().addListener((observable, oldText, newText) -> {
+            if (!updatingLanguageChoices) {
+                filterLanguages(newText);
+            }
+        });
+        languageSearch.focusedProperty().addListener((observable, wasFocused, focused) -> {
+            if (focused) {
+                showLanguageResults();
+            }
+        });
+        spokenLanguages.getSelectionModel().selectedItemProperty().addListener(
+                (observable, oldLanguage, newLanguage) -> {
+                    if (updatingLanguageChoices) {
+                        return;
+                    }
+                    if (languageSeparator.equals(newLanguage)) {
+                        updatingLanguageChoices = true;
+                        spokenLanguages.getSelectionModel().select(oldLanguage);
+                        updatingLanguageChoices = false;
+                    } else if (newLanguage != null && !languageSearch.getText().isBlank()) {
+                        resetLanguageChoices(newLanguage);
+                    }
+                });
+    }
+
+    private ListCell<SpokenLanguage> createLanguageCell() {
+        return new ListCell<>() {
+            @Override
+            protected void updateItem(SpokenLanguage item, boolean empty) {
+                super.updateItem(item, empty);
+                boolean separator = !empty && languageSeparator.equals(item);
+                getStyleClass().remove("language-separator");
+                if (separator) {
+                    getStyleClass().add("language-separator");
+                }
+                setDisable(separator);
+                setMouseTransparent(separator);
+                setText(empty || item == null ? null
+                        : separator ? "────────  " + item.displayName() : item.toString());
+            }
+        };
+    }
+
+    private List<SpokenLanguage> languageChoicesWithSeparator() {
+        List<SpokenLanguage> displayed = new ArrayList<>(languageChoices.size() + 1);
+        int promotedCount = Math.min(3, languageChoices.size());
+        displayed.addAll(languageChoices.subList(0, promotedCount));
+        if (languageChoices.size() > promotedCount) {
+            displayed.add(languageSeparator);
+            displayed.addAll(languageChoices.subList(promotedCount, languageChoices.size()));
+        }
+        return displayed;
+    }
+
+    private void filterLanguages(String query) {
+        SpokenLanguage selected = spokenLanguages.getValue();
+        String normalized = query == null ? "" : query.strip().toLowerCase(I18n.locale());
+        List<SpokenLanguage> filtered = normalized.isEmpty()
+                ? languageChoicesWithSeparator()
+                : languageChoices.stream()
+                        .filter(language -> language.toString().toLowerCase(I18n.locale()).contains(normalized)
+                                || language.code().contains(normalized))
+                        .toList();
+        updatingLanguageChoices = true;
+        spokenLanguages.getItems().setAll(filtered);
+        if (selected != null && filtered.contains(selected)) {
+            spokenLanguages.getSelectionModel().select(selected);
+        } else {
+            spokenLanguages.getSelectionModel().clearSelection();
+        }
+        updatingLanguageChoices = false;
+        if (languageSearch.isFocused()) {
+            showLanguageResults();
+        }
+    }
+
+    private void showLanguageResults() {
+        Platform.runLater(() -> {
+            spokenLanguages.show();
+            languageSearch.requestFocus();
+            languageSearch.positionCaret(languageSearch.getText().length());
+        });
+    }
+
+    private void resetLanguageChoices(SpokenLanguage selected) {
+        updatingLanguageChoices = true;
+        languageSearch.clear();
+        spokenLanguages.getItems().setAll(languageChoicesWithSeparator());
+        spokenLanguages.getSelectionModel().select(selected);
+        updatingLanguageChoices = false;
     }
 
     private static Region spacer() {
@@ -408,12 +533,18 @@ public final class MainView implements AutoCloseable {
             showOperationError(tr("main.subtitleCreationFailed"), tr("main.chooseTrackLanguage"));
             return;
         }
+        if (voiceOverMode.isSelected() && SpokenLanguage.AUTO.code().equals(selectedLanguage.code())) {
+            showOperationError(tr("main.subtitleCreationFailed"), tr("main.voiceOverChooseLanguage"));
+            return;
+        }
         SubtitleReadiness readiness = subtitleCreationService.readiness();
         if (!readiness.ready()) {
             refreshReadiness();
             showOperationError(tr("main.setupRequired"), tr("main.openComponentsFirst"));
             return;
         }
+        DialogueAudioMode audioMode = voiceOverMode.isSelected()
+                ? DialogueAudioMode.MIXED_VOICE_OVER : DialogueAudioMode.STANDARD;
 
         long operationId = beginOperation();
         closePreparedAudio();
@@ -429,7 +560,7 @@ public final class MainView implements AutoCloseable {
         activeTask = worker.submit(() -> {
             try {
                 CreatedSubtitles result = subtitleCreationService.create(
-                        media.file(), selectedTrack.streamIndex(), selectedLanguage.code(),
+                        media.file(), selectedTrack.streamIndex(), selectedLanguage.code(), audioMode,
                         Thread.currentThread()::isInterrupted,
                         pipelineProgress -> runOnUiIfCurrent(
                                 operationId, () -> updatePipelineProgress(pipelineProgress)));
@@ -454,7 +585,8 @@ public final class MainView implements AutoCloseable {
                 result.warnings().isEmpty() ? tr("main.checksPassed")
                         : tr("main.warningCount", result.warnings().size())));
         showNotice(result.warnings().isEmpty() ? "" : tr("main.checkPrefix") + " "
-                        + String.join(" ", result.warnings()),
+                        + result.warnings().stream().map(MainView::localizedWarning)
+                                .collect(java.util.stream.Collectors.joining(" ")),
                 !result.warnings().isEmpty());
         activeTask = null;
     }
@@ -641,8 +773,22 @@ public final class MainView implements AutoCloseable {
         settingsButton.setDisable(busy);
         audioTracks.setDisable(busy);
         spokenLanguages.setDisable(busy);
+        languageSearch.setDisable(busy);
+        voiceOverMode.setDisable(busy);
         createSubtitlesButton.setDisable(busy);
         prepareAudioButton.setDisable(busy);
+    }
+
+    private static String localizedWarning(SubtitleWarning warning) {
+        String key = switch (warning.type()) {
+            case LONG_LINE -> "warning.longLine";
+            case TOO_MANY_LINES -> "warning.tooManyLines";
+            case TOO_FAST -> "warning.tooFast";
+            case REPEATED_TEXT -> "warning.repeatedText";
+            case LOW_CONFIDENCE -> "warning.lowConfidence";
+            case MIXED_VOICE_OVER -> "warning.mixedVoiceOver";
+        };
+        return tr(key, warning.count());
     }
 
     private void closePreparedAudio() {
