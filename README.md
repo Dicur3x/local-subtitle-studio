@@ -4,6 +4,8 @@
 
 Local Subtitle Studio is a desktop application for creating subtitles from video while keeping media on the user's computer. The first supported platform is Windows.
 
+The current implementation status and intentionally pending requirements are tracked in [`ROADMAP.md`](ROADMAP.md).
+
 > Status: early MVP development. The current build can install its local toolchain and create an experimental original-language SRT locally from a selected video audio track.
 
 ## Current features
@@ -121,6 +123,8 @@ These cases are deliberately not presented as finished one-click features yet:
 - The UI now has an experimental mixed-voice-over switch. It requires an explicit target language so an English opening cannot make automatic detection select the wrong language for the whole file, and it marks the result for review. It does not yet separate the quieter original from the voice-over: both are already mixed into the same samples. Reliable dual-language extraction requires a separately evaluated source-separation pipeline and visible uncertainty.
 
 See [ADR 0005](docs/architecture/0005-multilingual-dialogue-and-voice-over.md) for the proposed modes, filenames, and acceptance criteria.
+
+Translation development has started on a separate branch. The implemented foundation batches 12 target cues with neighbouring context, preserves cue IDs and timestamps, rejects missing/duplicate/invented IDs, and provides a local llama.cpp adapter with JSON-schema output. It is intentionally not exposed in the main UI until the managed model and real English↔Russian quality checks pass. See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
 
 ## Test
 
