@@ -99,6 +99,8 @@ public final class SettingsDialog {
                 1, 4, currentSubtitles.maximumLines(), 1);
         Spinner<Integer> minimumDuration = integerSpinner(
                 200, 10_000, currentSubtitles.minimumDurationMs(), 100);
+        Spinner<Integer> maximumDuration = integerSpinner(
+                1_000, 30_000, currentSubtitles.maximumDurationMs(), 250);
         Spinner<Integer> startPadding = integerSpinner(
                 0, 5_000, currentSubtitles.startPaddingMs(), 25);
         Spinner<Integer> endPadding = integerSpinner(
@@ -149,10 +151,11 @@ public final class SettingsDialog {
         addSpinnerRow(subtitleGrid, 0, tr("settings.maxChars"), charactersPerLine);
         addSpinnerRow(subtitleGrid, 1, tr("settings.maxLines"), maximumLines);
         addSpinnerRow(subtitleGrid, 2, tr("settings.minDuration"), minimumDuration);
-        addSpinnerRow(subtitleGrid, 3, tr("settings.startPadding"), startPadding);
-        addSpinnerRow(subtitleGrid, 4, tr("settings.endPadding"), endPadding);
-        addSpinnerRow(subtitleGrid, 5, tr("settings.nextGap"), speechGap);
-        addSpinnerRow(subtitleGrid, 6, tr("settings.readingSpeed"), maximumCps);
+        addSpinnerRow(subtitleGrid, 3, tr("settings.maxDuration"), maximumDuration);
+        addSpinnerRow(subtitleGrid, 4, tr("settings.startPadding"), startPadding);
+        addSpinnerRow(subtitleGrid, 5, tr("settings.endPadding"), endPadding);
+        addSpinnerRow(subtitleGrid, 6, tr("settings.nextGap"), speechGap);
+        addSpinnerRow(subtitleGrid, 7, tr("settings.readingSpeed"), maximumCps);
 
         Label explanation = new Label(tr("settings.explanation"));
         explanation.setWrapText(true);
@@ -180,7 +183,7 @@ public final class SettingsDialog {
             validationResult.setText(tr("settings.checkingTools"));
             ApplicationSettings candidate = values(ffmpeg, ffprobe, whisper, model, vadModel,
                     temporaryDirectory, subtitlePreferences(charactersPerLine, maximumLines,
-                            minimumDuration, startPadding, endPadding, speechGap, maximumCps));
+                            minimumDuration, maximumDuration, startPadding, endPadding, speechGap, maximumCps));
             Thread thread = Thread.startVirtualThread(() -> {
                 try {
                     ToolValidationReport report = toolValidator.validate(candidate,
@@ -221,7 +224,7 @@ public final class SettingsDialog {
         dialog.setResultConverter(button -> button == save
                 ? values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
                         subtitlePreferences(charactersPerLine, maximumLines, minimumDuration,
-                                startPadding, endPadding, speechGap, maximumCps),
+                                maximumDuration, startPadding, endPadding, speechGap, maximumCps),
                         new OutputPreferences(outputLocation.getValue(), outputDirectory.getText()),
                         uiLanguage.getValue())
                 : null);
@@ -389,6 +392,7 @@ public final class SettingsDialog {
             Spinner<Integer> charactersPerLine,
             Spinner<Integer> maximumLines,
             Spinner<Integer> minimumDuration,
+            Spinner<Integer> maximumDuration,
             Spinner<Integer> startPadding,
             Spinner<Integer> endPadding,
             Spinner<Integer> speechGap,
@@ -398,6 +402,7 @@ public final class SettingsDialog {
                 committedValue(charactersPerLine),
                 committedValue(maximumLines),
                 committedValue(minimumDuration),
+                committedValue(maximumDuration),
                 committedValue(startPadding),
                 committedValue(endPadding),
                 committedValue(speechGap),

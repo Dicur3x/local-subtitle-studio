@@ -1,6 +1,6 @@
 package io.github.dicur3x.lss.subtitles;
 
-public final class SubtitleCreationException extends Exception {
+public class SubtitleCreationException extends Exception {
     public SubtitleCreationException(String message) {
         super(message);
     }

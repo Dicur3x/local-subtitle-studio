@@ -40,7 +40,7 @@ class WhisperSubtitleCreationServiceTest {
                 (command, cancellation) -> {
                     commands.add(command);
                     if ("ffmpeg-test".equals(command.getFirst())) {
-                        Files.write(Path.of(command.getLast()), new byte[45]);
+                        TestAudioFiles.writeCanonicalWav(Path.of(command.getLast()), 5);
                     } else {
                         int outputIndex = command.indexOf("--output-file");
                         Files.writeString(Path.of(command.get(outputIndex + 1) + ".json"), """

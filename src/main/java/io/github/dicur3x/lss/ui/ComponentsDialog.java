@@ -428,12 +428,21 @@ public final class ComponentsDialog {
         modelDescription.setText(profileDescription(profile) + " "
                 + tr("components.downloadSize", formatSize(profile.sizeBytes())));
         try {
-            boolean alreadyInstalled = toolsService.currentModel()
+            boolean active = toolsService.currentModel()
                     .filter(bundle -> bundle.profileId().equals(profile.id())
                             && bundle.modelSha256().equalsIgnoreCase(profile.sha256()))
                     .isPresent();
-            installModel.setDisable(alreadyInstalled || activeThread.get() != null);
-            installModel.setText(alreadyInstalled ? tr("components.installed") : tr("components.installModel"));
+            boolean installed = toolsService.isModelInstalled(profile);
+            installModel.setDisable(active || activeThread.get() != null);
+            installModel.setText(active ? tr("components.modelActive")
+                    : installed ? tr("components.useModel") : tr("components.installModel"));
+            if (active) {
+                modelStatus.setText(tr("components.modelInstalled", profileName(profile)));
+            } else if (installed) {
+                modelStatus.setText(tr("components.modelInstalledNotActive", profileName(profile)));
+            } else {
+                modelStatus.setText(tr("components.modelNotInstalled", profileName(profile)));
+            }
         } catch (Exception exception) {
             installModel.setDisable(false);
             installModel.setText(tr("components.installModel"));

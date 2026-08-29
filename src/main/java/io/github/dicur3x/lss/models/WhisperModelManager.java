@@ -53,6 +53,18 @@ public final class WhisperModelManager {
         }
     }
 
+    public boolean isInstalled(WhisperModelProfile profile) {
+        Objects.requireNonNull(profile, "profile");
+        try {
+            Path model = modelsDirectory.resolve(profile.fileName());
+            Path vad = modelsDirectory.resolve(VAD_FILE_NAME);
+            return Files.isRegularFile(model) && Files.size(model) == profile.sizeBytes()
+                    && Files.isRegularFile(vad) && Files.size(vad) == VAD_SIZE;
+        } catch (IOException exception) {
+            return false;
+        }
+    }
+
     public synchronized InstalledModelBundle install(
             WhisperModelProfile profile,
             OperationProgress progress,

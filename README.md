@@ -20,12 +20,13 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - Persistent paths for `ffmpeg`, `ffprobe`, `whisper-cli`, Whisper and VAD models, and temporary files.
 - Built-in tool-path validation from the Advanced settings dialog.
 - Extraction of the selected stream to temporary 16 kHz, mono, signed 16-bit PCM WAV.
-- Local whisper.cpp recognition with automatic language detection or a manual choice from all 100 supported languages, Silero VAD, full token timestamps, and speech-boundary-aware subtitle timing.
+- Local whisper.cpp recognition with an integrated searchable choice of all 100 supported languages, Silero VAD, full token timestamps, and speech-boundary-aware subtitle timing.
+- Long audio is recognized in overlapping eight-minute windows with a clean Whisper context, then merged back onto the original timeline; suspicious repetition is retried and a still-corrupt result is never saved.
 - A five-stage creation progress bar with the real percentage reported by whisper.cpp during recognition.
 - Word-timestamp-aware splitting of long utterances, balanced line wrapping, and validation for overlaps, repeated text, line length, line count, and reading speed.
 - Configurable readability and timing limits in Advanced settings, with safe defaults and automatic migration of older settings files.
 - A visible readiness check for FFmpeg, whisper.cpp, the recognition model, and VAD before subtitle creation starts.
-- Conservative duplicate-cue cleanup plus low-confidence warnings for passages that need human review; recognized dialogue is never silently rewritten.
+- Conservative duplicate-cue cleanup, cautious restoration of unambiguous Russian `ё` forms, and low-confidence warnings; flagged cues can be reviewed and edited in the application without changing timestamps.
 - UTF-8 SRT export beside the source video, in a `Subs` folder, or in a chosen folder; an existing subtitle file is never overwritten.
 - English UI by default with an optional Russian translation, plus a minimal first-run guide.
 - Internal tasks for a self-contained Windows app image and portable ZIP are prepared, but no user build is published before broader testing.
@@ -94,7 +95,9 @@ Whisper model files are immutable weights rather than applications with regular 
 
 Silero VAD is installed with every managed model. It identifies speech boundaries and avoids sending long silent spans to recognition. In whisper.cpp 1.9.2, JSON segment offsets are on the original audio timeline while raw full-JSON token offsets can remain on the silence-compressed VAD timeline. Local Subtitle Studio detects that mismatch, treats segment offsets as authoritative, and projects token positions back into each original segment. This fixes the accumulated “subtitles run early” error seen on real material with opening silence or music.
 
-Long recognition segments are split at word-token boundaries before timing is optimized. The defaults target 42 characters per line, two lines, an 800 ms minimum duration, and a 20 characters/second warning threshold. These values, together with speech padding and the next-speech gap, can be adjusted in **Advanced settings**.
+Long recognition segments are split at word-token boundaries before timing is optimized. The defaults target 42 characters per line, two lines, an 800 ms minimum duration, a seven-second maximum that prevents a short phrase from lingering through silence, and a 20 characters/second warning threshold. These values, together with speech padding and the next-speech gap, can be adjusted in **Advanced settings**.
+
+Feature-length audio is additionally divided into overlapping eight-minute recognition windows. Every window starts a new whisper.cpp process, so a hallucinated phrase cannot carry its text context through the rest of a film. The overlap is assigned to exactly one window when results are merged. If a window still contains a long stuck phrase, the application retries it with text-context carry disabled; if the retry is also suspicious, no SRT is saved and the user sees the affected time.
 
 ## Recognition correction
 
@@ -133,7 +136,8 @@ Current original-subtitle pipeline:
 
 ```text
 video → audio track → temporary PCM → Silero VAD → whisper.cpp full JSON
-      → token-aware segmentation → word-aware timing → validation
+      → overlapping clean-context windows → original-timeline merge
+      → token-aware segmentation → word-aware timing → validation/review
       → balanced formatting → non-overwriting SRT
 ```
 

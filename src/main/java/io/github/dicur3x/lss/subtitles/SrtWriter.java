@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -68,6 +69,41 @@ public final class SrtWriter {
                     Files.deleteIfExists(temporary);
                 } catch (IOException ignored) {
                     // The finished SRT, if any, has already been moved into place.
+                }
+            }
+        }
+    }
+
+    public void replace(Path subtitleFile, List<SubtitleCue> cues) throws SubtitleCreationException {
+        Path destination = Objects.requireNonNull(subtitleFile, "subtitleFile")
+                .toAbsolutePath().normalize();
+        Path directory = destination.getParent();
+        if (directory == null || !Files.isDirectory(directory) || !Files.isWritable(directory)) {
+            throw new SubtitleCreationException("The subtitle folder is not writable.");
+        }
+        List<SubtitleCue> safeCues = List.copyOf(Objects.requireNonNull(cues, "cues"));
+        if (safeCues.isEmpty()) {
+            throw new SubtitleCreationException("An empty subtitle file was not saved.");
+        }
+
+        Path temporary = null;
+        try {
+            temporary = Files.createTempFile(directory, ".lss-review-", ".tmp");
+            Files.writeString(temporary, render(safeCues), StandardCharsets.UTF_8);
+            try {
+                Files.move(temporary, destination,
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
+                Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException exception) {
+            throw new SubtitleCreationException("Could not save the reviewed SRT file.", exception);
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException ignored) {
+                    // A successfully moved temporary file no longer exists.
                 }
             }
         }

@@ -62,4 +62,19 @@ class SrtWriterTest {
         assertEquals(custom.toAbsolutePath(), created.getParent());
         assertTrue(Files.isRegularFile(created));
     }
+
+    @Test
+    void atomicallyReplacesOnlyTheReviewedSubtitleFile() throws Exception {
+        Path subtitle = Files.writeString(temporaryDirectory.resolve("film.ru.srt"), "old contents");
+        Path neighbour = Files.writeString(temporaryDirectory.resolve("film.en.srt"), "leave intact");
+        SubtitleCue reviewed = new SubtitleCue(
+                7, Duration.ofSeconds(3), Duration.ofSeconds(5), "Исправленный текст", List.of());
+
+        new SrtWriter().replace(subtitle, List.of(reviewed));
+
+        String contents = Files.readString(subtitle);
+        assertTrue(contents.startsWith("1\r\n00:00:03,000 --> 00:00:05,000"));
+        assertTrue(contents.contains("Исправленный текст"));
+        assertEquals("leave intact", Files.readString(neighbour));
+    }
 }

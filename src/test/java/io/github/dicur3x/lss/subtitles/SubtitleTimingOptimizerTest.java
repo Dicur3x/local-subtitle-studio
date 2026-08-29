@@ -32,6 +32,16 @@ class SubtitleTimingOptimizerTest {
         assertEquals(Duration.ofMillis(2_500), cues.getFirst().end());
     }
 
+    @Test
+    void capsAStuckShortPhraseInsteadOfLeavingItVisibleThroughSilence() {
+        List<SubtitleCue> cues = optimizer.optimize(List.of(
+                segment(1, 10_000, 46_000, "Пожалуйста, Майкл")
+        ));
+
+        assertEquals(Duration.ofMillis(9_950), cues.getFirst().start());
+        assertEquals(Duration.ofMillis(16_950), cues.getFirst().end());
+    }
+
     private static RecognizedSegment segment(long id, long start, long end, String text) {
         return new RecognizedSegment(
                 id, Duration.ofMillis(start), Duration.ofMillis(end), text, List.of());

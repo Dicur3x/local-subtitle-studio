@@ -15,7 +15,7 @@ public record ApplicationSettings(
         OutputPreferences outputPreferences,
         UiLanguage uiLanguage
 ) {
-    public static final int CURRENT_SCHEMA_VERSION = 5;
+    public static final int CURRENT_SCHEMA_VERSION = 6;
 
     public ApplicationSettings {
         schemaVersion = schemaVersion <= 0 ? CURRENT_SCHEMA_VERSION : schemaVersion;

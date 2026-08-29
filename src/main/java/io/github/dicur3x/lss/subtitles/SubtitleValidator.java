@@ -21,11 +21,7 @@ public final class SubtitleValidator {
             throw new SubtitleCreationException("No subtitle cues were produced.");
         }
 
-        int longLines = 0;
-        int tooManyLines = 0;
-        int tooFast = 0;
-        int repeated = 0;
-        int lowConfidence = 0;
+        List<SubtitleIssue> issues = new ArrayList<>();
         SubtitleCue previous = null;
         for (int index = 0; index < safeCues.size(); index++) {
             SubtitleCue cue = safeCues.get(index);
@@ -39,33 +35,32 @@ public final class SubtitleValidator {
             String formatted = formatter.format(cue.originalText());
             String[] lines = formatted.split("\\R", -1);
             if (lines.length > preferences.maximumLines()) {
-                tooManyLines++;
+                issues.add(new SubtitleIssue(SubtitleWarningType.TOO_MANY_LINES, cue.id()));
             }
             if (java.util.Arrays.stream(lines)
                     .anyMatch(line -> line.length() > preferences.maximumCharactersPerLine())) {
-                longLines++;
+                issues.add(new SubtitleIssue(SubtitleWarningType.LONG_LINE, cue.id()));
             }
             double seconds = cue.end().minus(cue.start()).toMillis() / 1_000d;
             double charactersPerSecond = cue.originalText().length() / Math.max(0.001d, seconds);
             if (charactersPerSecond > preferences.maximumCharactersPerSecond()) {
-                tooFast++;
+                issues.add(new SubtitleIssue(SubtitleWarningType.TOO_FAST, cue.id()));
             }
             if (previous != null && normalize(previous.originalText()).equals(normalize(cue.originalText()))) {
-                repeated++;
+                issues.add(new SubtitleIssue(SubtitleWarningType.REPEATED_TEXT, cue.id()));
             }
             if (hasLowConfidence(cue)) {
-                lowConfidence++;
+                issues.add(new SubtitleIssue(SubtitleWarningType.LOW_CONFIDENCE, cue.id()));
             }
             previous = cue;
         }
 
         List<SubtitleWarning> warnings = new ArrayList<>();
-        addCountWarning(warnings, longLines, SubtitleWarningType.LONG_LINE);
-        addCountWarning(warnings, tooManyLines, SubtitleWarningType.TOO_MANY_LINES);
-        addCountWarning(warnings, tooFast, SubtitleWarningType.TOO_FAST);
-        addCountWarning(warnings, repeated, SubtitleWarningType.REPEATED_TEXT);
-        addCountWarning(warnings, lowConfidence, SubtitleWarningType.LOW_CONFIDENCE);
-        return new SubtitleValidationReport(warnings);
+        for (SubtitleWarningType type : SubtitleWarningType.values()) {
+            int count = (int) issues.stream().filter(issue -> issue.type() == type).count();
+            addCountWarning(warnings, count, type);
+        }
+        return new SubtitleValidationReport(warnings, issues);
     }
 
     private static void addCountWarning(

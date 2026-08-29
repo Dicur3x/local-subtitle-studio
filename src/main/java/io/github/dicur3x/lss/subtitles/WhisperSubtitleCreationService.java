@@ -86,6 +86,8 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                         percent -> progress.accept(PipelineProgress.at(
                                 PipelineStage.TRANSCRIBING, percent,
                                 "Recognizing speech locally with whisper.cpp…")));
+                result = new TranscriptionResult(result.language(),
+                        RussianYoNormalizer.normalize(result.segments(), result.language()));
                 throwIfCancelled(cancellationRequested);
                 if (result.segments().isEmpty()) {
                     throw new SubtitleCreationException(
@@ -119,7 +121,8 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                 Path output = srtWriter.write(mediaFile, result.language(), cues);
                 progress.accept(PipelineProgress.complete("Subtitles are ready"));
                 return new CreatedSubtitles(
-                        output, result.language(), cues.size(), warnings);
+                        output, result.language(), cues.size(), warnings, cues, validation.issues(),
+                        settings.subtitlePreferences());
             } finally {
                 try {
                     audio.close();

@@ -96,6 +96,10 @@ public final class ManagedToolsService {
         return modelManager.current();
     }
 
+    public boolean isModelInstalled(WhisperModelProfile profile) {
+        return modelManager.isInstalled(profile);
+    }
+
     public InstalledModelBundle installModel(
             WhisperModelProfile profile,
             OperationProgress progress,

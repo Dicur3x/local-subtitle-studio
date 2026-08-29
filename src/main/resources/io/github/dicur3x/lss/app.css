@@ -133,11 +133,10 @@
     -fx-background-color: #1a2130;
 }
 
-.language-search {
+.combo-box:editable .text-field {
     -fx-background-color: #111620;
-    -fx-background-radius: 7px;
-    -fx-border-color: #3b465b;
-    -fx-border-radius: 7px;
+    -fx-background-radius: 6px 0 0 6px;
+    -fx-border-width: 0;
     -fx-text-fill: #e8ecf3;
     -fx-prompt-text-fill: #737e91;
 }
@@ -298,4 +297,35 @@
     -fx-highlight-fill: #536aa5;
     -fx-highlight-text-fill: #ffffff;
     -fx-font-family: "Segoe UI", sans-serif;
+}
+
+.review-dialog .split-pane,
+.review-dialog .split-pane-divider {
+    -fx-background-color: transparent;
+}
+
+.review-list {
+    -fx-background-color: #111620;
+    -fx-border-color: #3b465b;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+}
+
+.review-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #dfe5ef;
+    -fx-padding: 10px;
+}
+
+.review-list .list-cell:selected {
+    -fx-background-color: #344263;
+}
+
+.review-editor {
+    -fx-control-inner-background: #111620;
+    -fx-background-color: #111620;
+    -fx-text-fill: #e8ecf3;
+    -fx-highlight-fill: #536aa5;
+    -fx-highlight-text-fill: #ffffff;
+    -fx-font-size: 15px;
 }

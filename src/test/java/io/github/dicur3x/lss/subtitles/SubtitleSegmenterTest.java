@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SubtitleSegmenterTest {
     @Test
     void splitsLongTextAtWordTokensAndKeepsTheirSpeechBoundaries() {
-        SubtitlePreferences preferences = new SubtitlePreferences(10, 2, 800, 50, 200, 100, 20);
+        SubtitlePreferences preferences = new SubtitlePreferences(10, 2, 800, 7_000, 50, 200, 100, 20);
         RecognizedSegment source = new RecognizedSegment(
                 1, ms(1_000), ms(2_600), "one two three four five six seven eight",
                 List.of(

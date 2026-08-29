@@ -12,16 +12,18 @@ public final class SubtitleTimingOptimizer {
     public static final Duration DEFAULT_START_PADDING = Duration.ofMillis(50);
     public static final Duration DEFAULT_END_PADDING = Duration.ofMillis(200);
     public static final Duration DEFAULT_MINIMUM_DURATION = Duration.ofMillis(800);
+    public static final Duration DEFAULT_MAXIMUM_DURATION = Duration.ofSeconds(7);
     public static final Duration DEFAULT_NEXT_SPEECH_GAP = Duration.ofMillis(100);
 
     private final Duration startPadding;
     private final Duration endPadding;
     private final Duration minimumDuration;
+    private final Duration maximumDuration;
     private final Duration nextSpeechGap;
 
     public SubtitleTimingOptimizer() {
         this(DEFAULT_START_PADDING, DEFAULT_END_PADDING,
-                DEFAULT_MINIMUM_DURATION, DEFAULT_NEXT_SPEECH_GAP);
+                DEFAULT_MINIMUM_DURATION, DEFAULT_MAXIMUM_DURATION, DEFAULT_NEXT_SPEECH_GAP);
     }
 
     public SubtitleTimingOptimizer(SubtitlePreferences preferences) {
@@ -29,6 +31,7 @@ public final class SubtitleTimingOptimizer {
                 Duration.ofMillis(Objects.requireNonNull(preferences, "preferences").startPaddingMs()),
                 Duration.ofMillis(preferences.endPaddingMs()),
                 Duration.ofMillis(preferences.minimumDurationMs()),
+                Duration.ofMillis(preferences.maximumDurationMs()),
                 Duration.ofMillis(preferences.nextSpeechGapMs())
         );
     }
@@ -37,11 +40,16 @@ public final class SubtitleTimingOptimizer {
             Duration startPadding,
             Duration endPadding,
             Duration minimumDuration,
+            Duration maximumDuration,
             Duration nextSpeechGap
     ) {
         this.startPadding = requireNonNegative(startPadding, "startPadding");
         this.endPadding = requireNonNegative(endPadding, "endPadding");
         this.minimumDuration = requirePositive(minimumDuration, "minimumDuration");
+        this.maximumDuration = requirePositive(maximumDuration, "maximumDuration");
+        if (this.maximumDuration.compareTo(this.minimumDuration) < 0) {
+            throw new IllegalArgumentException("maximumDuration must not be shorter than minimumDuration");
+        }
         this.nextSpeechGap = requireNonNegative(nextSpeechGap, "nextSpeechGap");
     }
 
@@ -54,6 +62,7 @@ public final class SubtitleTimingOptimizer {
             Duration start = subtractClamped(segment.speechStart(), startPadding);
             Duration paddedSpeechEnd = segment.speechEnd().plus(endPadding);
             Duration end = max(paddedSpeechEnd, start.plus(minimumDuration));
+            end = min(end, start.plus(maximumDuration));
             if (index + 1 < segments.size()) {
                 Duration latestEnd = subtractClamped(segments.get(index + 1).speechStart(), nextSpeechGap);
                 if (latestEnd.compareTo(end) < 0) {
@@ -75,6 +84,10 @@ public final class SubtitleTimingOptimizer {
 
     private static Duration max(Duration first, Duration second) {
         return first.compareTo(second) >= 0 ? first : second;
+    }
+
+    private static Duration min(Duration first, Duration second) {
+        return first.compareTo(second) <= 0 ? first : second;
     }
 
     private static Duration requireNonNegative(Duration value, String name) {

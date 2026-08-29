@@ -65,7 +65,7 @@ tasks.register<Test>("integrationTest") {
 }
 
 tasks.register<Test>("realMediaTest") {
-    description = "Runs the opt-in local Whisper pipeline against the first two minutes of a real media file."
+    description = "Runs opt-in local Whisper checks against a real media file."
     group = "verification"
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
@@ -74,6 +74,17 @@ tasks.register<Test>("realMediaTest") {
         includeTags("manual")
     }
     providers.gradleProperty("realMedia").orNull?.let { systemProperty("lss.real.media", it) }
+    providers.gradleProperty("realModel").orNull?.let { systemProperty("lss.real.model", it) }
+    providers.gradleProperty("realDurationSeconds").orNull?.let {
+        systemProperty("lss.real.duration.seconds", it)
+    }
+    providers.gradleProperty("realReport").orNull?.let { systemProperty("lss.real.report", it) }
+    providers.gradleProperty("realExpectedFirstMillis").orNull?.let {
+        systemProperty("lss.real.expected.first.ms", it)
+    }
+    providers.gradleProperty("realTailToleranceSeconds").orNull?.let {
+        systemProperty("lss.real.tail.tolerance.seconds", it)
+    }
 }
 
 val prepareJpackageInput = tasks.register<Sync>("prepareJpackageInput") {

@@ -14,27 +14,31 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @Tag("manual")
-class RealMediaWhisperPipelineTest {
-    private static final Pattern FIRST_START = Pattern.compile("(?m)^00:00:(\\d{2}),(\\d{3}) -->");
-
+class RealMediaLongFormWhisperTest {
     @TempDir
     Path temporaryDirectory;
 
     @Test
-    void firstTwoMinutesStayOnTheOriginalTimelineWithVad() throws Exception {
+    void recognizesPastTheOldRepetitionPointAcrossChunkBoundaries() throws Exception {
         String configuredMedia = System.getProperty("lss.real.media", "");
         assumeTrue(!configuredMedia.isBlank(), "Run with -PrealMedia=<path>");
         Path media = Path.of(configuredMedia);
         assumeTrue(Files.isRegularFile(media), "Real media file is not available");
+        int durationSeconds = Integer.parseInt(System.getProperty("lss.real.duration.seconds", "1020"));
+        int tailToleranceSeconds = Integer.parseInt(
+                System.getProperty("lss.real.tail.tolerance.seconds", "90"));
+        assumeTrue(durationSeconds > PcmWavChunker.DEFAULT_CORE_DURATION.toSeconds(),
+                "The long-form check must cross at least one recognition chunk boundary");
 
         ObjectMapper objectMapper = new ObjectMapper();
         SettingsManager settingsManager = new SettingsManager(new JsonSettingsRepository(
@@ -45,10 +49,10 @@ class RealMediaWhisperPipelineTest {
                 ? loaded
                 : loaded.withManagedModels(configuredModel, loaded.whisperVadModel());
         ExternalProcessRunner processRunner = new DefaultExternalProcessRunner();
-        Path sample = temporaryDirectory.resolve("first-120s.wav");
+        Path sample = temporaryDirectory.resolve("long-form-sample.wav");
         ProcessResult extraction = processRunner.run(List.of(
                 settings.ffmpegExecutable(), "-hide_banner", "-loglevel", "error", "-y",
-                "-i", media.toString(), "-map", "0:a:0", "-t", "120",
+                "-i", media.toString(), "-map", "0:a:0", "-t", Integer.toString(durationSeconds),
                 "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", sample.toString()
         ), () -> false);
         assertEquals(0, extraction.exitCode(), extraction.standardError());
@@ -57,20 +61,27 @@ class RealMediaWhisperPipelineTest {
                 () -> settings, processRunner, objectMapper)
                 .create(sample, 0, "ru", () -> false, progress -> { });
 
-        String srt = Files.readString(created.file());
-        Matcher matcher = FIRST_START.matcher(srt);
-        assertTrue(matcher.find(), "First SRT timestamp was not found");
-        long firstStartMillis = Long.parseLong(matcher.group(1)) * 1_000L
-                + Long.parseLong(matcher.group(2));
-        long expectedFirstMillis = Long.parseLong(
-                System.getProperty("lss.real.expected.first.ms", "-1"));
-        if (expectedFirstMillis >= 0) {
-            assertTrue(Math.abs(firstStartMillis - expectedFirstMillis) <= 500,
-                    "Expected the first cue near " + expectedFirstMillis
-                            + " ms, got " + firstStartMillis + " ms");
-        } else {
-            assertTrue(firstStartMillis >= 0 && firstStartMillis < 120_000,
-                    "The first cue escaped the two-minute source timeline: " + firstStartMillis + " ms");
+        assertFalse(created.cues().isEmpty());
+        Duration lastCueEnd = created.cues().getLast().end();
+        assertTrue(lastCueEnd.compareTo(Duration.ofSeconds(durationSeconds - (long) tailToleranceSeconds)) > 0,
+                "Recognition stopped too early at " + lastCueEnd);
+        assertTrue(lastCueEnd.compareTo(Duration.ofSeconds(durationSeconds + 2L)) <= 0,
+                "Recognition escaped the source timeline at " + lastCueEnd);
+        assertTrue(created.cues().stream().allMatch(cue ->
+                        cue.end().minus(cue.start()).toMillis()
+                                <= settings.subtitlePreferences().maximumDurationMs()),
+                "A cue exceeded the configured maximum display duration");
+        assertTrue(created.cues().stream().anyMatch(cue ->
+                        cue.start().compareTo(PcmWavChunker.DEFAULT_CORE_DURATION) < 0
+                                && cue.end().compareTo(PcmWavChunker.DEFAULT_CORE_DURATION) > 0
+                        || cue.start().compareTo(PcmWavChunker.DEFAULT_CORE_DURATION) >= 0),
+                "No cue survived beyond the first recognition chunk");
+
+        String report = System.getProperty("lss.real.report", "").strip();
+        if (!report.isEmpty()) {
+            Path destination = Path.of(report).toAbsolutePath().normalize();
+            Files.createDirectories(destination.getParent());
+            Files.copy(created.file(), destination, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 }
