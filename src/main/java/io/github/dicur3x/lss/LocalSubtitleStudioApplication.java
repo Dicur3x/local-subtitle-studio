@@ -15,6 +15,7 @@ import io.github.dicur3x.lss.infrastructure.tools.ExternalToolValidator;
 import io.github.dicur3x.lss.media.MediaProbe;
 import io.github.dicur3x.lss.media.ffprobe.FfprobeMediaProbe;
 import io.github.dicur3x.lss.models.WhisperModelManager;
+import io.github.dicur3x.lss.recovery.RecoveryStore;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
 import io.github.dicur3x.lss.settings.JsonSettingsRepository;
 import io.github.dicur3x.lss.settings.SettingsException;
@@ -50,6 +51,7 @@ public final class LocalSubtitleStudioApplication extends Application {
     private SettingsManager settingsManager;
     private ExternalProcessRunner processRunner;
     private ManagedToolsService managedToolsService;
+    private RecoveryStore recoveryStore;
     private String startupSettingsWarning;
     private boolean firstRun;
     private boolean openComponentsAfterStart;
@@ -69,6 +71,9 @@ public final class LocalSubtitleStudioApplication extends Application {
         }
         I18n.use(settingsManager.current().uiLanguage());
         managedToolsService = createManagedToolsService();
+        ObjectMapper objectMapper = new ObjectMapper();
+        recoveryStore = new RecoveryStore(
+                () -> SettingsPaths.managedStorageDirectory(settingsManager.current()), objectMapper);
         MediaProbe mediaProbe = (file, cancellationRequested) ->
                 new FfprobeMediaProbe(settingsManager.current().ffprobeExecutable(), processRunner)
                         .probe(file, cancellationRequested);
@@ -79,9 +84,10 @@ public final class LocalSubtitleStudioApplication extends Application {
                         processRunner
                 ).extract(file, streamIndex, cancellationRequested);
         SubtitleCreationService subtitleCreationService = new WhisperSubtitleCreationService(
-                settingsManager::current, processRunner, new ObjectMapper());
+                settingsManager::current, processRunner, objectMapper, recoveryStore);
         mainView = new MainView(
-                mediaProbe, audioExtractor, subtitleCreationService, this::showComponents, this::showSettings);
+                mediaProbe, audioExtractor, subtitleCreationService, recoveryStore,
+                this::showComponents, this::showSettings);
 
         Scene scene = new Scene(mainView.root(), 920, 690);
         scene.getStylesheets().add(Objects.requireNonNull(
@@ -98,6 +104,9 @@ public final class LocalSubtitleStudioApplication extends Application {
         stage.setMinHeight(600);
         stage.setScene(scene);
         stage.show();
+        if (getParameters().getUnnamed().isEmpty()) {
+            Platform.runLater(() -> mainView.offerRecovery(stage));
+        }
         if (openComponentsAfterStart) {
             Platform.runLater(() -> showComponents(stage));
         }
@@ -138,7 +147,7 @@ public final class LocalSubtitleStudioApplication extends Application {
     private ManagedToolsService createManagedToolsService() {
         ObjectMapper objectMapper = new ObjectMapper();
         HttpDownloadClient downloadClient = new HttpDownloadClient();
-        Path applicationData = SettingsPaths.applicationDataDirectory();
+        Path applicationData = SettingsPaths.managedStorageDirectory(settingsManager.current());
         ManagedComponentStore store = new ManagedComponentStore(
                 applicationData.resolve("components"), objectMapper);
         return new ManagedToolsService(
@@ -163,9 +172,13 @@ public final class LocalSubtitleStudioApplication extends Application {
     private void showSettings(Window owner) {
         SettingsDialog dialog = new SettingsDialog(new ExternalToolValidator(processRunner));
         var previousLanguage = settingsManager.current().uiLanguage();
+        Path previousStorage = SettingsPaths.managedStorageDirectory(settingsManager.current());
         dialog.showAndWait(owner, settingsManager.current()).ifPresent(settings -> {
             try {
                 settingsManager.save(settings);
+                if (!SettingsPaths.managedStorageDirectory(settings).equals(previousStorage)) {
+                    managedToolsService = createManagedToolsService();
+                }
                 if (settings.uiLanguage() != previousLanguage) {
                     showAlert(owner, Alert.AlertType.INFORMATION,
                             tr("app.languageSaved"), tr("app.restartForLanguage"));

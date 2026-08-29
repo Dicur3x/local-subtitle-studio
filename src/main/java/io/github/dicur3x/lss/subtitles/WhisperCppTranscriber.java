@@ -76,8 +76,20 @@ public final class WhisperCppTranscriber {
             BooleanSupplier cancellationRequested,
             IntConsumer progress
     ) throws SubtitleCreationException {
+        return transcribe(audioFile, spokenLanguage, cancellationRequested, progress,
+                TranscriptionCheckpointStore.disabled());
+    }
+
+    public TranscriptionResult transcribe(
+            Path audioFile,
+            String spokenLanguage,
+            BooleanSupplier cancellationRequested,
+            IntConsumer progress,
+            TranscriptionCheckpointStore checkpoints
+    ) throws SubtitleCreationException {
         Objects.requireNonNull(cancellationRequested, "cancellationRequested");
         Objects.requireNonNull(progress, "progress");
+        Objects.requireNonNull(checkpoints, "checkpoints");
         String language;
         try {
             language = SpokenLanguage.requireSupportedCode(spokenLanguage);
@@ -100,20 +112,26 @@ public final class WhisperCppTranscriber {
                 throwIfCancelled(cancellationRequested);
                 RecognitionAudioChunk chunk = chunks.get(index);
                 int completedChunks = index;
-                TranscriptionResult partial = runChunk(
-                        chunk.file(), language, 64, cancellationRequested,
-                        chunkPercent -> reportProgress.accept(overallProgress(
-                                completedChunks, chunks.size(), chunkPercent)));
-                var suspicious = TranscriptionQualityGuard.suspiciousRepetition(partial.segments());
-                if (suspicious.isPresent()) {
+                RecognitionChunkKey chunkKey = new RecognitionChunkKey(
+                        index, chunk.offset(), chunk.keepFrom(), chunk.keepTo());
+                TranscriptionResult partial = checkpoints.load(chunkKey).orElse(null);
+                if (partial == null) {
                     partial = runChunk(
-                            chunk.file(), language, 0, cancellationRequested,
+                            chunk.file(), language, 64, cancellationRequested,
                             chunkPercent -> reportProgress.accept(overallProgress(
                                     completedChunks, chunks.size(), chunkPercent)));
-                    suspicious = TranscriptionQualityGuard.suspiciousRepetition(partial.segments());
+                    var suspicious = TranscriptionQualityGuard.suspiciousRepetition(partial.segments());
                     if (suspicious.isPresent()) {
-                        throw new RecognitionLoopException(chunk.keepFrom());
+                        partial = runChunk(
+                                chunk.file(), language, 0, cancellationRequested,
+                                chunkPercent -> reportProgress.accept(overallProgress(
+                                        completedChunks, chunks.size(), chunkPercent)));
+                        suspicious = TranscriptionQualityGuard.suspiciousRepetition(partial.segments());
+                        if (suspicious.isPresent()) {
+                            throw new RecognitionLoopException(chunk.keepFrom());
+                        }
                     }
+                    checkpoints.save(chunkKey, partial);
                 }
                 languageVotes.merge(partial.language(),
                         (long) partial.segments().size(), Long::sum);

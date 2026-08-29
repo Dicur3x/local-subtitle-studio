@@ -5,6 +5,8 @@ import io.github.dicur3x.lss.audio.PreparedAudio;
 import io.github.dicur3x.lss.media.MediaProbe;
 import io.github.dicur3x.lss.media.model.AudioTrack;
 import io.github.dicur3x.lss.media.model.MediaInfo;
+import io.github.dicur3x.lss.recovery.RecoveryJob;
+import io.github.dicur3x.lss.recovery.RecoveryStore;
 import io.github.dicur3x.lss.subtitles.CreatedSubtitles;
 import io.github.dicur3x.lss.subtitles.DialogueAudioMode;
 import io.github.dicur3x.lss.subtitles.PipelineProgress;
@@ -20,6 +22,9 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -71,6 +76,7 @@ public final class MainView implements AutoCloseable {
     private final MediaProbe mediaProbe;
     private final AudioExtractor audioExtractor;
     private final SubtitleCreationService subtitleCreationService;
+    private final RecoveryStore recoveryStore;
     private final Consumer<Window> componentsAction;
     private final Consumer<Window> settingsAction;
     private final AudioTrackDisplayFormatter trackFormatter = new AudioTrackDisplayFormatter();
@@ -89,6 +95,7 @@ public final class MainView implements AutoCloseable {
     private final Button settingsButton = new Button(tr("main.advancedSettings"));
     private final Button createSubtitlesButton = new Button(tr("main.createSrt"));
     private final Button prepareAudioButton = new Button(tr("main.prepareAudio"));
+    private final Button setupComponentsButton = new Button(tr("main.openComponents"));
     private final Button reviewButton = new Button(tr("main.reviewWarnings"));
     private final ComboBox<AudioTrack> audioTracks = new ComboBox<>();
     private final ComboBox<SpokenLanguage> spokenLanguages = new ComboBox<>();
@@ -105,11 +112,13 @@ public final class MainView implements AutoCloseable {
     private PreparedAudio preparedAudio;
     private CreatedSubtitles lastCreatedSubtitles;
     private boolean updatingLanguageChoices;
+    private RecoveryJob pendingRecovery;
 
     public MainView(
             MediaProbe mediaProbe,
             AudioExtractor audioExtractor,
             SubtitleCreationService subtitleCreationService,
+            RecoveryStore recoveryStore,
             Consumer<Window> componentsAction,
             Consumer<Window> settingsAction
     ) {
@@ -117,6 +126,7 @@ public final class MainView implements AutoCloseable {
         this.audioExtractor = Objects.requireNonNull(audioExtractor, "audioExtractor");
         this.subtitleCreationService = Objects.requireNonNull(
                 subtitleCreationService, "subtitleCreationService");
+        this.recoveryStore = Objects.requireNonNull(recoveryStore, "recoveryStore");
         this.componentsAction = Objects.requireNonNull(componentsAction, "componentsAction");
         this.settingsAction = Objects.requireNonNull(settingsAction, "settingsAction");
         buildView();
@@ -248,8 +258,16 @@ public final class MainView implements AutoCloseable {
         prepareAudioButton.getStyleClass().add("quiet-button");
         prepareAudioButton.setOnAction(event -> prepareSelectedAudio());
         prepareAudioButton.setTooltip(new Tooltip(tr("main.prepareAudioTooltip")));
+        setupComponentsButton.getStyleClass().add("quiet-button");
+        setupComponentsButton.setOnAction(event -> {
+            componentsAction.accept(setupComponentsButton.getScene().getWindow());
+            refreshReadiness();
+        });
+        setupComponentsButton.setVisible(false);
+        setupComponentsButton.setManaged(false);
 
-        FlowPane buttons = new FlowPane(10, 10, createSubtitlesButton, prepareAudioButton);
+        FlowPane buttons = new FlowPane(
+                10, 10, createSubtitlesButton, prepareAudioButton, setupComponentsButton);
         buttons.setAlignment(Pos.CENTER_LEFT);
         audioState.setMaxWidth(Double.MAX_VALUE);
         VBox audioActionRow = new VBox(10, readinessState, audioState, buttons);
@@ -465,6 +483,22 @@ public final class MainView implements AutoCloseable {
             return;
         }
 
+        OptionalRecoveryDecision decision = recoveryDecision(file);
+        if (decision == OptionalRecoveryDecision.CANCEL) {
+            return;
+        }
+        if (decision == OptionalRecoveryDecision.RESTORE_PREVIOUS) {
+            recoveryStore.activeJob().ifPresent(this::restoreRecovery);
+            return;
+        }
+        inspectNow(file);
+    }
+
+    private void inspectNow(Path file) {
+        recoveryStore.activeJob().filter(job -> job.matchesMedia(file))
+                .filter(recoveryStore::sourceIsUnchanged)
+                .ifPresent(job -> pendingRecovery = job);
+
         long operationId = beginOperation();
         closePreparedAudio();
         showLoadingState(file);
@@ -481,6 +515,95 @@ public final class MainView implements AutoCloseable {
                 runOnUiIfCurrent(operationId, () -> showError(exception.getMessage()));
             }
         });
+    }
+
+    public void offerRecovery(Window owner) {
+        recoveryStore.activeJob().ifPresent(job -> {
+            if (!recoveryStore.sourceIsUnchanged(job)) {
+                showUnavailableRecovery(owner, job);
+                return;
+            }
+            ButtonType restore = new ButtonType(tr("recovery.restore"), ButtonBar.ButtonData.OK_DONE);
+            ButtonType later = new ButtonType(tr("recovery.later"), ButtonBar.ButtonData.CANCEL_CLOSE);
+            Alert alert = recoveryAlert(owner, tr("recovery.foundTitle"),
+                    tr("recovery.found", job.displayName(), job.completedChunks()), restore, later);
+            if (alert.showAndWait().orElse(later) == restore) {
+                restoreRecovery(job);
+            }
+        });
+    }
+
+    private OptionalRecoveryDecision recoveryDecision(Path requestedFile) {
+        var active = recoveryStore.activeJob();
+        if (active.isEmpty()) {
+            return OptionalRecoveryDecision.CONTINUE_NEW;
+        }
+        RecoveryJob job = active.get();
+        Window owner = root.getScene() == null ? null : root.getScene().getWindow();
+        if (job.matchesMedia(requestedFile)) {
+            if (!recoveryStore.sourceIsUnchanged(job)) {
+                showUnavailableRecovery(owner, job);
+            }
+            return OptionalRecoveryDecision.CONTINUE_NEW;
+        }
+        if (!recoveryStore.sourceIsUnchanged(job)) {
+            showUnavailableRecovery(owner, job);
+            return OptionalRecoveryDecision.CONTINUE_NEW;
+        }
+        ButtonType restore = new ButtonType(tr("recovery.restorePrevious"), ButtonBar.ButtonData.YES);
+        ButtonType continueNew = new ButtonType(tr("recovery.startNew"), ButtonBar.ButtonData.NO);
+        ButtonType cancel = new ButtonType(tr("common.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
+        Alert alert = recoveryAlert(owner, tr("recovery.otherFileTitle"),
+                tr("recovery.otherFile", job.displayName(), requestedFile.getFileName()),
+                restore, continueNew, cancel);
+        ButtonType selected = alert.showAndWait().orElse(cancel);
+        if (selected == restore) {
+            return OptionalRecoveryDecision.RESTORE_PREVIOUS;
+        }
+        if (selected == continueNew) {
+            discardRecovery();
+            return OptionalRecoveryDecision.CONTINUE_NEW;
+        }
+        return OptionalRecoveryDecision.CANCEL;
+    }
+
+    private void restoreRecovery(RecoveryJob job) {
+        pendingRecovery = job;
+        inspectNow(job.mediaPath());
+    }
+
+    private void showUnavailableRecovery(Window owner, RecoveryJob job) {
+        Alert alert = recoveryAlert(owner, tr("recovery.unavailableTitle"),
+                tr("recovery.unavailable", job.displayName()),
+                new ButtonType(tr("recovery.discard"), ButtonBar.ButtonData.OK_DONE));
+        alert.showAndWait();
+        discardRecovery();
+    }
+
+    private static Alert recoveryAlert(
+            Window owner,
+            String header,
+            String content,
+            ButtonType... buttons
+    ) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        if (owner != null) {
+            alert.initOwner(owner);
+        }
+        alert.setTitle("Local Subtitle Studio");
+        alert.setHeaderText(header);
+        alert.setContentText(content);
+        alert.getButtonTypes().setAll(buttons);
+        return alert;
+    }
+
+    private void discardRecovery() {
+        pendingRecovery = null;
+        try {
+            recoveryStore.discard();
+        } catch (IOException exception) {
+            LOGGER.log(Level.WARNING, "Could not discard the previous recovery workspace", exception);
+        }
     }
 
     private void showLoadingState(Path file) {
@@ -517,9 +640,26 @@ public final class MainView implements AutoCloseable {
         setControlsBusy(false);
         createSubtitlesButton.setDisable(mediaInfo.audioTracks().isEmpty());
         prepareAudioButton.setDisable(mediaInfo.audioTracks().isEmpty());
-        status.setText(mediaInfo.audioTracks().isEmpty()
-                ? tr("main.noAudioTracks")
-                : tr("main.audioTracksFound", mediaInfo.audioTracks().size()));
+        RecoveryJob recovery = pendingRecovery;
+        if (recovery != null && recovery.matchesMedia(mediaInfo.file())) {
+            mediaInfo.audioTracks().stream()
+                    .filter(track -> track.streamIndex() == recovery.audioStreamIndex())
+                    .findFirst().ifPresent(track -> audioTracks.getSelectionModel().select(track));
+            languageChoices.stream().filter(language -> language.code().equals(recovery.spokenLanguage()))
+                    .findFirst().ifPresent(language -> {
+                        selectedSpokenLanguage = language;
+                        restoreLanguageSelection();
+                    });
+            voiceOverMode.setSelected(recovery.audioMode() == DialogueAudioMode.MIXED_VOICE_OVER);
+            createSubtitlesButton.setText(tr("main.continueSrt"));
+            status.setText(tr("recovery.loaded", recovery.completedChunks()));
+            audioState.setText(tr("recovery.loadedHint"));
+        } else {
+            createSubtitlesButton.setText(tr("main.createSrt"));
+            status.setText(mediaInfo.audioTracks().isEmpty()
+                    ? tr("main.noAudioTracks")
+                    : tr("main.audioTracksFound", mediaInfo.audioTracks().size()));
+        }
         Platform.runLater(() -> mainScrollPane.setVvalue(1));
         activeTask = null;
     }
@@ -583,11 +723,31 @@ public final class MainView implements AutoCloseable {
         SubtitleReadiness readiness = subtitleCreationService.readiness();
         if (!readiness.ready()) {
             refreshReadiness();
-            showOperationError(tr("main.setupRequired"), tr("main.openComponentsFirst"));
+            ButtonType open = new ButtonType(tr("main.openComponents"), ButtonBar.ButtonData.OK_DONE);
+            ButtonType cancel = new ButtonType(tr("common.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
+            Alert alert = recoveryAlert(createSubtitlesButton.getScene().getWindow(),
+                    tr("main.setupRequired"), tr("main.openComponentsFirst"), open, cancel);
+            if (alert.showAndWait().orElse(cancel) == open) {
+                componentsAction.accept(createSubtitlesButton.getScene().getWindow());
+                refreshReadiness();
+            }
             return;
         }
         DialogueAudioMode audioMode = voiceOverMode.isSelected()
                 ? DialogueAudioMode.MIXED_VOICE_OVER : DialogueAudioMode.STANDARD;
+        var activeRecovery = recoveryStore.activeJob();
+        if (activeRecovery.isPresent() && activeRecovery.get().matchesMedia(media.file())
+                && !activeRecovery.get().matchesSelection(media.file(), selectedTrack.streamIndex(),
+                selectedLanguage.code(), audioMode)) {
+            ButtonType restart = new ButtonType(tr("recovery.restartWithSettings"), ButtonBar.ButtonData.OK_DONE);
+            ButtonType cancel = new ButtonType(tr("common.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
+            Alert alert = recoveryAlert(createSubtitlesButton.getScene().getWindow(),
+                    tr("recovery.settingsChangedTitle"), tr("recovery.settingsChanged"), restart, cancel);
+            if (alert.showAndWait().orElse(cancel) != restart) {
+                return;
+            }
+            discardRecovery();
+        }
 
         long operationId = beginOperation();
         closePreparedAudio();
@@ -609,12 +769,18 @@ public final class MainView implements AutoCloseable {
                                 operationId, () -> updatePipelineProgress(pipelineProgress)));
                 runOnUiIfCurrent(operationId, () -> showCreatedSubtitles(result));
             } catch (CancellationException ignored) {
-                runOnUiIfCurrent(operationId, () -> restoreMediaReadyState(tr("main.subtitleCreationCancelled")));
+                runOnUiIfCurrent(operationId, () -> {
+                    restoreMediaReadyState(tr("main.subtitleCreationCancelled"));
+                    markRecoveryAvailable();
+                });
             } catch (Exception exception) {
                 LOGGER.log(Level.SEVERE, "Subtitle creation failed", exception);
                 runOnUiIfCurrent(operationId,
-                        () -> showOperationError(tr("main.subtitleCreationFailed"),
-                                localizedCreationFailure(exception)));
+                        () -> {
+                            showOperationError(tr("main.subtitleCreationFailed"),
+                                    localizedCreationFailure(exception));
+                            markRecoveryAvailable();
+                        });
             }
         });
     }
@@ -627,6 +793,8 @@ public final class MainView implements AutoCloseable {
     }
 
     private void showCreatedSubtitles(CreatedSubtitles result) {
+        pendingRecovery = null;
+        createSubtitlesButton.setText(tr("main.createSrt"));
         updatePipelineProgress(PipelineProgress.complete(tr("main.subtitlesReady")));
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
@@ -673,6 +841,18 @@ public final class MainView implements AutoCloseable {
         activeTask = null;
     }
 
+    private void markRecoveryAvailable() {
+        MediaInfo media = currentMedia;
+        if (media == null) {
+            return;
+        }
+        recoveryStore.activeJob().filter(job -> job.matchesMedia(media.file())).ifPresent(job -> {
+            pendingRecovery = job;
+            createSubtitlesButton.setText(tr("main.continueSrt"));
+            audioState.setText(tr("recovery.saved", job.completedChunks()));
+        });
+    }
+
     private void showOperationError(String title, String message) {
         hideProgress();
         cancelButton.setVisible(false);
@@ -717,9 +897,13 @@ public final class MainView implements AutoCloseable {
         if (readiness.ready()) {
             readinessState.setText(tr("main.readinessReady"));
             readinessState.getStyleClass().add("validation-success");
+            setupComponentsButton.setVisible(false);
+            setupComponentsButton.setManaged(false);
         } else {
             readinessState.setText(tr("main.readinessMissing"));
             readinessState.getStyleClass().add("validation-warning");
+            setupComponentsButton.setVisible(true);
+            setupComponentsButton.setManaged(true);
         }
     }
 
@@ -739,6 +923,7 @@ public final class MainView implements AutoCloseable {
             showIdleState();
         } else {
             restoreMediaReadyState(tr("main.operationCancelled"));
+            markRecoveryAvailable();
         }
     }
 
@@ -834,6 +1019,13 @@ public final class MainView implements AutoCloseable {
         createSubtitlesButton.setDisable(busy);
         prepareAudioButton.setDisable(busy);
         reviewButton.setDisable(busy);
+        setupComponentsButton.setDisable(busy);
+    }
+
+    private enum OptionalRecoveryDecision {
+        CONTINUE_NEW,
+        RESTORE_PREVIOUS,
+        CANCEL
     }
 
     private static String localizedWarning(SubtitleWarning warning) {

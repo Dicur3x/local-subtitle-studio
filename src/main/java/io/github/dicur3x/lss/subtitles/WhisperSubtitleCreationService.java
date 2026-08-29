@@ -5,6 +5,7 @@ import io.github.dicur3x.lss.audio.AudioExtractionException;
 import io.github.dicur3x.lss.audio.FfmpegAudioExtractor;
 import io.github.dicur3x.lss.audio.PreparedAudio;
 import io.github.dicur3x.lss.infrastructure.process.ExternalProcessRunner;
+import io.github.dicur3x.lss.recovery.RecoveryStore;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
 
 import java.io.IOException;
@@ -26,14 +27,26 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
     private final Supplier<ApplicationSettings> settingsSupplier;
     private final ExternalProcessRunner processRunner;
     private final ObjectMapper objectMapper;
+    private final RecoveryStore recoveryStore;
+
     public WhisperSubtitleCreationService(
             Supplier<ApplicationSettings> settingsSupplier,
             ExternalProcessRunner processRunner,
             ObjectMapper objectMapper
     ) {
+        this(settingsSupplier, processRunner, objectMapper, null);
+    }
+
+    public WhisperSubtitleCreationService(
+            Supplier<ApplicationSettings> settingsSupplier,
+            ExternalProcessRunner processRunner,
+            ObjectMapper objectMapper,
+            RecoveryStore recoveryStore
+    ) {
         this.settingsSupplier = Objects.requireNonNull(settingsSupplier, "settingsSupplier");
         this.processRunner = Objects.requireNonNull(processRunner, "processRunner");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.recoveryStore = recoveryStore;
     }
 
     @Override
@@ -71,8 +84,23 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                     PipelineStage.PREPARING_AUDIO, 0, "Preparing speech-recognition audio…"));
             FfmpegAudioExtractor extractor = new FfmpegAudioExtractor(
                     settings.ffmpegExecutable(), settings.temporaryDirectory(), processRunner);
-            PreparedAudio audio = extractor.extract(mediaFile, audioStreamIndex, cancellationRequested);
+            RecoveryStore.RecoverySession recovery = recoveryStore == null ? null : recoveryStore.open(
+                    mediaFile, audioStreamIndex, spokenLanguage, audioMode,
+                    recognitionProfile(settings, whisperModel, vadModel));
+            PreparedAudio temporaryAudio = null;
             try {
+                Path audioFile;
+                if (recovery != null) {
+                    audioFile = recovery.audioFile();
+                    if (!recovery.hasPreparedAudio()) {
+                        extractor.extractTo(
+                                mediaFile, audioStreamIndex, audioFile, cancellationRequested);
+                    }
+                } else {
+                    temporaryAudio = extractor.extract(
+                            mediaFile, audioStreamIndex, cancellationRequested);
+                    audioFile = temporaryAudio.file();
+                }
                 throwIfCancelled(cancellationRequested);
                 progress.accept(PipelineProgress.at(
                         PipelineStage.PREPARING_AUDIO, 100, "Audio is ready"));
@@ -82,10 +110,11 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                         settings.whisperExecutable(), whisperModel, vadModel, processRunner,
                         new WhisperJsonParser(objectMapper));
                 TranscriptionResult result = transcriber.transcribe(
-                        audio.file(), spokenLanguage, cancellationRequested,
+                        audioFile, spokenLanguage, cancellationRequested,
                         percent -> progress.accept(PipelineProgress.at(
                                 PipelineStage.TRANSCRIBING, percent,
-                                "Recognizing speech locally with whisper.cpp…")));
+                                "Recognizing speech locally with whisper.cpp…")),
+                        recovery == null ? TranscriptionCheckpointStore.disabled() : recovery);
                 result = new TranscriptionResult(result.language(),
                         RussianYoNormalizer.normalize(result.segments(), result.language()));
                 throwIfCancelled(cancellationRequested);
@@ -120,14 +149,19 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
                         settings.subtitlePreferences(), settings.outputPreferences());
                 Path output = srtWriter.write(mediaFile, result.language(), cues);
                 progress.accept(PipelineProgress.complete("Subtitles are ready"));
+                if (recovery != null) {
+                    recovery.complete();
+                }
                 return new CreatedSubtitles(
                         output, result.language(), cues.size(), warnings, cues, validation.issues(),
                         settings.subtitlePreferences());
             } finally {
-                try {
-                    audio.close();
-                } catch (IOException exception) {
-                    LOGGER.log(Level.WARNING, "Could not remove temporary recognition audio", exception);
+                if (temporaryAudio != null) {
+                    try {
+                        temporaryAudio.close();
+                    } catch (IOException exception) {
+                        LOGGER.log(Level.WARNING, "Could not remove temporary recognition audio", exception);
+                    }
                 }
             }
         } catch (CancellationException exception) {
@@ -138,6 +172,26 @@ public final class WhisperSubtitleCreationService implements SubtitleCreationSer
             throw new SubtitleCreationException(
                     "The configured Whisper model path is invalid. Open Components and reinstall the model.",
                     exception);
+        }
+    }
+
+    private static String recognitionProfile(
+            ApplicationSettings settings,
+            Path whisperModel,
+            Path vadModel
+    ) throws SubtitleCreationException {
+        try {
+            return String.join("|",
+                    "long-form-v1",
+                    settings.whisperExecutable(),
+                    whisperModel.toString(),
+                    Long.toString(Files.size(whisperModel)),
+                    Long.toString(Files.getLastModifiedTime(whisperModel).toMillis()),
+                    vadModel.toString(),
+                    Long.toString(Files.size(vadModel)),
+                    Long.toString(Files.getLastModifiedTime(vadModel).toMillis()));
+        } catch (IOException exception) {
+            throw new SubtitleCreationException("Could not inspect the selected recognition models.", exception);
         }
     }
 

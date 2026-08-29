@@ -2,6 +2,7 @@ package io.github.dicur3x.lss.settings;
 
 import java.nio.file.Path;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 
 public final class SettingsPaths {
     private SettingsPaths() {
@@ -31,5 +32,17 @@ public final class SettingsPaths {
             return Path.of(localAppData, "LocalSubtitleStudio");
         }
         return Path.of(System.getProperty("user.home"), ".config", "local-subtitle-studio");
+    }
+
+    public static Path managedStorageDirectory(ApplicationSettings settings) {
+        String configured = settings == null ? "" : settings.managedStorageDirectory();
+        if (configured == null || configured.isBlank()) {
+            return applicationDataDirectory().toAbsolutePath().normalize();
+        }
+        try {
+            return Path.of(configured).toAbsolutePath().normalize();
+        } catch (InvalidPathException exception) {
+            return applicationDataDirectory().toAbsolutePath().normalize();
+        }
     }
 }

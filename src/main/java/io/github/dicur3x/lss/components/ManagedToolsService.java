@@ -8,8 +8,10 @@ import io.github.dicur3x.lss.models.WhisperModelProfile;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
 import io.github.dicur3x.lss.settings.SettingsException;
 import io.github.dicur3x.lss.settings.SettingsManager;
+import io.github.dicur3x.lss.settings.SettingsPaths;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +100,10 @@ public final class ManagedToolsService {
 
     public boolean isModelInstalled(WhisperModelProfile profile) {
         return modelManager.isInstalled(profile);
+    }
+
+    public Path managedStorageDirectory() {
+        return SettingsPaths.managedStorageDirectory(settingsManager.current());
     }
 
     public InstalledModelBundle installModel(

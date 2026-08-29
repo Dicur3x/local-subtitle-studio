@@ -22,14 +22,16 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - Extraction of the selected stream to temporary 16 kHz, mono, signed 16-bit PCM WAV.
 - Local whisper.cpp recognition with an integrated searchable choice of all 100 supported languages, Silero VAD, full token timestamps, and speech-boundary-aware subtitle timing.
 - Long audio is recognized in overlapping eight-minute windows with a clean Whisper context, then merged back onto the original timeline; suspicious repetition is retried and a still-corrupt result is never saved.
+- Unfinished work is recoverable after cancellation, closing, or a crash: prepared audio and every completed eight-minute recognition window are reused. Loading another video first shows a data-loss warning.
 - A five-stage creation progress bar with the real percentage reported by whisper.cpp during recognition.
 - Word-timestamp-aware splitting of long utterances, balanced line wrapping, and validation for overlaps, repeated text, line length, line count, and reading speed.
 - Configurable readability and timing limits in Advanced settings, with safe defaults and automatic migration of older settings files.
 - A visible readiness check for FFmpeg, whisper.cpp, the recognition model, and VAD before subtitle creation starts.
+- Missing recognition components expose an **Open Components** action both beside the Create button and in the setup prompt.
 - Conservative duplicate-cue cleanup, cautious restoration of unambiguous Russian `ё` forms, and low-confidence warnings; flagged cues can be reviewed and edited in the application without changing timestamps.
 - UTF-8 SRT export beside the source video, in a `Subs` folder, or in a chosen folder; an existing subtitle file is never overwritten.
 - English UI by default with an optional Russian translation, plus a minimal first-run guide.
-- Internal tasks for a self-contained Windows app image and portable ZIP are prepared, but no user build is published before broader testing.
+- A self-contained Windows portable ZIP is published as an explicitly marked prerelease for early testing.
 - Cancellation of active inspection, audio-preparation, and transcription processes.
 - Automatic removal of temporary recognition audio after the operation.
 
@@ -37,7 +39,7 @@ No media is uploaded. Cloud services are not used by the current build.
 
 ## Run as an ordinary user
 
-When a tested Windows build is eventually attached to a private test release:
+Download the latest Windows ZIP from [GitHub Releases](https://github.com/Dicur3x/local-subtitle-studio/releases):
 
 1. Extract the app-image or portable ZIP.
 2. Start `Local Subtitle Studio.exe`.
@@ -45,7 +47,7 @@ When a tested Windows build is eventually attached to a private test release:
 4. Let the guide open **Components**, then install the recommended tools and a model.
 5. Choose a video, audio track, and spoken language, then select **Create SRT**.
 
-There is no end-user release yet; for now, run the project from IntelliJ IDEA or Gradle. The planned packaged application includes its own Java runtime. The normal app image stores settings and managed downloads below `%LOCALAPPDATA%\LocalSubtitleStudio`. The portable ZIP contains a `portable.mode` marker and stores them in `data` beside the launcher. Neither mode changes the system `PATH` or requires administrator rights.
+The prerelease is intended for early testing and includes its own Java runtime. The normal app image stores settings and managed downloads below `%LOCALAPPDATA%\LocalSubtitleStudio`. The portable ZIP contains a `portable.mode` marker and stores them in `data` beside the launcher. Neither mode changes the system `PATH` or requires administrator rights.
 
 ## Developer requirements
 
@@ -61,7 +63,7 @@ FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. E
 .\gradlew.bat run
 ```
 
-Open **Components** and choose **Set up recommended tools + model** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg + whisper.cpp** updates only those program components and preserves the selected model. Models remain separately selectable. The application never installs an update silently. Open **Advanced settings** only when you want to override a managed path or change the temporary directory.
+Open **Components** and choose **Set up recommended tools + model** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg + whisper.cpp** updates only those program components and preserves the selected model. Models remain separately selectable. The application never installs an update silently. **Advanced settings** contains one storage folder for managed programs, models, and recoverable work; changing it affects future downloads and does not move existing files automatically.
 
 After choosing a video and audio track, leave **Spoken language** on **Auto detect** or select it manually, then press **Create SRT**. The output location is selected in **Advanced settings**. If the destination name already exists, a numbered file is created instead.
 
@@ -87,7 +89,13 @@ Environment variables such as `LSS_FFMPEG_PATH` and `LSS_FFPROBE_PATH` can still
 
 Creating WAV does not improve or upscale compressed AC-3, AAC, or other source audio. FFmpeg decodes the selected stream into the exact uncompressed PCM format expected by the recognition pipeline. The source video is opened read-only and remains unchanged.
 
-The larger WAV is short-lived working data. It is deleted when another track or video is chosen, when it is prepared again, or when the application exits normally.
+The larger WAV is working data, not an audio-quality upgrade. During subtitle creation it is retained in the local recovery workspace so an interrupted feature film does not need to be decoded or recognized again from the beginning. It is removed after a successful SRT or when the user confirms starting incompatible work.
+
+## Recovering interrupted work
+
+After every completed eight-minute Whisper window, the application writes an atomic local checkpoint. On the next start it offers to restore the source file, audio track, spoken language, voice-over mode, prepared PCM, and completed recognition windows. The source path, size, and modification time are checked before reuse; changed or missing media is never resumed silently.
+
+Only one unfinished single-file job is kept at this stage. Choosing another video displays the previous filename and offers to restore it, start the new file and remove the checkpoint, or cancel. A successfully written SRT clears the workspace automatically.
 
 ## Models, VAD, and subtitle timing
 

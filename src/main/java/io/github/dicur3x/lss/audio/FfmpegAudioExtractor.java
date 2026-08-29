@@ -44,6 +44,54 @@ public final class FfmpegAudioExtractor implements AudioExtractor {
         Path workingDirectory = createWorkingDirectory();
         Path outputFile = workingDirectory.resolve("track-" + streamIndex + ".wav");
 
+        try {
+            runExtraction(normalizedMedia, streamIndex, outputFile, cancellationRequested);
+            return new PreparedAudio(outputFile, workingDirectory);
+        } catch (CancellationException | AudioExtractionException exception) {
+            cleanupPartial(outputFile, workingDirectory);
+            throw exception;
+        }
+    }
+
+    /** Extracts directly into a persistent recovery workspace. */
+    public Path extractTo(
+            Path mediaFile,
+            int streamIndex,
+            Path outputFile,
+            BooleanSupplier cancellationRequested
+    ) throws AudioExtractionException {
+        Objects.requireNonNull(cancellationRequested, "cancellationRequested");
+        Path normalizedMedia = validateInput(mediaFile, streamIndex);
+        Path destination = Objects.requireNonNull(outputFile, "outputFile").toAbsolutePath().normalize();
+        try {
+            if (destination.getParent() == null) {
+                throw new AudioExtractionException("The recovery audio path has no parent directory.");
+            }
+            Files.createDirectories(destination.getParent());
+            runExtraction(normalizedMedia, streamIndex, destination, cancellationRequested);
+            return destination;
+        } catch (CancellationException exception) {
+            deletePartialFile(destination);
+            throw exception;
+        } catch (IOException exception) {
+            deletePartialFile(destination);
+            throw new AudioExtractionException("Could not prepare the recovery audio file.", exception);
+        } catch (AudioExtractionException exception) {
+            deletePartialFile(destination);
+            throw exception;
+        }
+    }
+
+    private void runExtraction(
+            Path normalizedMedia,
+            int streamIndex,
+            Path outputFile,
+            BooleanSupplier cancellationRequested
+    ) throws AudioExtractionException {
+        if (cancellationRequested.getAsBoolean()) {
+            throw new CancellationException("Audio preparation was cancelled");
+        }
+
         List<String> command = List.of(
                 executable,
                 "-nostdin",
@@ -71,24 +119,17 @@ public final class FfmpegAudioExtractor implements AudioExtractor {
             if (!Files.isRegularFile(outputFile) || Files.size(outputFile) <= MINIMUM_WAV_BYTES) {
                 throw new AudioExtractionException("FFmpeg did not create a valid WAV file.");
             }
-            return new PreparedAudio(outputFile, workingDirectory);
         } catch (CancellationException exception) {
-            cleanupPartial(outputFile, workingDirectory);
             throw exception;
         } catch (InterruptedException exception) {
-            cleanupPartial(outputFile, workingDirectory);
             Thread.currentThread().interrupt();
             throw new CancellationException("Audio preparation was interrupted");
         } catch (IOException exception) {
-            cleanupPartial(outputFile, workingDirectory);
             if (isExecutableMissing(exception)) {
                 throw new AudioExtractionException(
                         "FFmpeg was not found. Open Settings and choose ffmpeg.exe.", exception);
             }
             throw new AudioExtractionException("Could not prepare the selected audio track.", exception);
-        } catch (AudioExtractionException exception) {
-            cleanupPartial(outputFile, workingDirectory);
-            throw exception;
         }
     }
 
@@ -126,6 +167,14 @@ public final class FfmpegAudioExtractor implements AudioExtractor {
             Files.deleteIfExists(workingDirectory);
         } catch (IOException exception) {
             LOGGER.log(Level.WARNING, "Could not remove incomplete temporary audio", exception);
+        }
+    }
+
+    private static void deletePartialFile(Path outputFile) {
+        try {
+            Files.deleteIfExists(outputFile);
+        } catch (IOException exception) {
+            LOGGER.log(Level.WARNING, "Could not remove incomplete recovery audio", exception);
         }
     }
 
