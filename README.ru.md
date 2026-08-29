@@ -138,6 +138,6 @@ Local Subtitle Studio теперь обнаруживает это расхож�
 
 ## Лицензирование
 
-Репозиторий не содержит бинарные файлы FFmpeg, whisper.cpp или моделей. По запросу пользователя окно компонентов загружает их из указанных источников и сохраняет полученные сведения о лицензии/сборке. Текущая Windows-сборка FFmpeg essentials распространяется по GPLv3; whisper.cpp, веса OpenAI Whisper и Silero VAD — по MIT. См. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) и [решение об управляемых компонентах](docs/architecture/0003-managed-components-and-models.md).
+Исходный код Local Subtitle Studio распространяется по [лицензии MIT](LICENSE).
 
-Лицензия исходного кода Local Subtitle Studio ещё не выбрана. До публичного выпуска это необходимо сделать.
+Репозиторий не содержит бинарные файлы FFmpeg, whisper.cpp или моделей. По запросу пользователя окно компонентов загружает их из указанных источников и сохраняет полученные сведения о лицензии/сборке. Текущая Windows-сборка FFmpeg essentials распространяется по GPLv3; whisper.cpp, веса OpenAI Whisper и Silero VAD — по MIT. См. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) и [решение об управляемых компонентах](docs/architecture/0003-managed-components-and-models.md).

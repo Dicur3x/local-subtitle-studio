@@ -105,7 +105,8 @@ tasks.register<Exec>("packageAppImage") {
     group = "distribution"
     dependsOn(prepareJpackageInput, cleanJpackageOutput)
     val launcher = javaToolchains.launcherFor(java.toolchain)
-    val executableName = if (System.getProperty("os.name").startsWith("Windows")) "jpackage.exe" else "jpackage"
+    val windows = System.getProperty("os.name").startsWith("Windows")
+    val executableName = if (windows) "jpackage.exe" else "jpackage"
     doFirst {
         executable(launcher.get().metadata.installationPath.file("bin/$executableName").asFile)
         val input = layout.buildDirectory.dir("jpackage/input").get().asFile
@@ -122,6 +123,10 @@ tasks.register<Exec>("packageAppImage") {
             "--main-class", "io.github.dicur3x.lss.DesktopLauncher",
             "--java-options", "--enable-native-access=ALL-UNNAMED"
         )
+        if (windows) {
+            args("--icon", layout.projectDirectory
+                    .file("src/main/resources/io/github/dicur3x/lss/icon.ico").asFile.absolutePath)
+        }
     }
 }
 

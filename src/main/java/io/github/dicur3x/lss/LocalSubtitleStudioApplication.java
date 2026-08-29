@@ -31,6 +31,7 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
@@ -89,6 +90,10 @@ public final class LocalSubtitleStudioApplication extends Application {
         ).toExternalForm());
 
         stage.setTitle("Local Subtitle Studio");
+        stage.getIcons().add(new Image(Objects.requireNonNull(
+                getClass().getResource("/io/github/dicur3x/lss/icon.png"),
+                "application icon"
+        ).toExternalForm()));
         stage.setMinWidth(760);
         stage.setMinHeight(600);
         stage.setScene(scene);

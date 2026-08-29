@@ -143,6 +143,6 @@ video → audio track → temporary PCM → Silero VAD → whisper.cpp full JSON
 
 ## Licensing
 
-The repository does not contain FFmpeg, whisper.cpp, or model binaries. The Components screen downloads them directly from the listed project sources at the user's request and retains license/build information delivered in the archives. The current Windows FFmpeg essentials build is GPLv3; whisper.cpp, OpenAI Whisper model weights, and Silero VAD are MIT-licensed. See [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`docs/architecture/0003-managed-components-and-models.md`](docs/architecture/0003-managed-components-and-models.md).
+Local Subtitle Studio source code is available under the [MIT License](LICENSE).
 
-A source-code license for Local Subtitle Studio itself has not been selected yet and must be chosen before a public release.
+The repository does not contain FFmpeg, whisper.cpp, or model binaries. The Components screen downloads them directly from the listed project sources at the user's request and retains license/build information delivered in the archives. The current Windows FFmpeg essentials build is GPLv3; whisper.cpp, OpenAI Whisper model weights, and Silero VAD are MIT-licensed. See [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`docs/architecture/0003-managed-components-and-models.md`](docs/architecture/0003-managed-components-and-models.md).
