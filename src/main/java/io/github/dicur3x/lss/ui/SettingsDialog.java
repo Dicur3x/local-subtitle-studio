@@ -9,6 +9,7 @@ import io.github.dicur3x.lss.settings.OutputLocation;
 import io.github.dicur3x.lss.settings.OutputPreferences;
 import io.github.dicur3x.lss.settings.SubtitlePreferences;
 import io.github.dicur3x.lss.settings.UiLanguage;
+import io.github.dicur3x.lss.settings.SettingsPaths;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -71,6 +72,8 @@ public final class SettingsDialog {
         TextField model = field(current.whisperModel(), tr("settings.modelPrompt"));
         TextField vadModel = field(current.whisperVadModel(), tr("settings.vadPrompt"));
         TextField temporaryDirectory = field(current.temporaryDirectory(), tr("settings.tempPrompt"));
+        TextField managedStorageDirectory = field(
+                SettingsPaths.managedStorageDirectory(current).toString(), tr("settings.storagePrompt"));
         ComboBox<UiLanguage> uiLanguage = new ComboBox<>();
         uiLanguage.getItems().setAll(UiLanguage.values());
         uiLanguage.getSelectionModel().select(current.uiLanguage());
@@ -125,8 +128,9 @@ public final class SettingsDialog {
         addFileRow(grid, 3, tr("settings.whisperModel"), model, dialog, tr("settings.chooseModel"), tr("settings.whisperModel"), "*.bin");
         addFileRow(grid, 4, tr("settings.vadModel"), vadModel, dialog, tr("settings.chooseVad"), tr("settings.vadModel"), "*.bin");
         addDirectoryRow(grid, 5, tr("settings.temporaryFiles"), temporaryDirectory, dialog);
-        grid.add(new Label(tr("settings.interfaceLanguage")), 0, 6);
-        grid.add(uiLanguage, 1, 6);
+        addDirectoryRow(grid, 6, tr("settings.managedStorage"), managedStorageDirectory, dialog);
+        grid.add(new Label(tr("settings.interfaceLanguage")), 0, 7);
+        grid.add(uiLanguage, 1, 7);
 
         GridPane outputGrid = new GridPane();
         outputGrid.setHgap(12);
@@ -182,7 +186,8 @@ public final class SettingsDialog {
             validate.setDisable(true);
             validationResult.setText(tr("settings.checkingTools"));
             ApplicationSettings candidate = values(ffmpeg, ffprobe, whisper, model, vadModel,
-                    temporaryDirectory, subtitlePreferences(charactersPerLine, maximumLines,
+                    temporaryDirectory, managedStorageDirectory,
+                    subtitlePreferences(charactersPerLine, maximumLines,
                             minimumDuration, maximumDuration, startPadding, endPadding, speechGap, maximumCps));
             Thread thread = Thread.startVirtualThread(() -> {
                 try {
@@ -223,6 +228,7 @@ public final class SettingsDialog {
 
         dialog.setResultConverter(button -> button == save
                 ? values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
+                        managedStorageDirectory,
                         subtitlePreferences(charactersPerLine, maximumLines, minimumDuration,
                                 maximumDuration, startPadding, endPadding, speechGap, maximumCps),
                         new OutputPreferences(outputLocation.getValue(), outputDirectory.getText()),
@@ -357,9 +363,11 @@ public final class SettingsDialog {
             TextField model,
             TextField vadModel,
             TextField temporaryDirectory,
+            TextField managedStorageDirectory,
             SubtitlePreferences subtitlePreferences
     ) {
         return values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
+                managedStorageDirectory,
                 subtitlePreferences, OutputPreferences.defaults(), UiLanguage.ENGLISH);
     }
 
@@ -370,6 +378,7 @@ public final class SettingsDialog {
             TextField model,
             TextField vadModel,
             TextField temporaryDirectory,
+            TextField managedStorageDirectory,
             SubtitlePreferences subtitlePreferences,
             OutputPreferences outputPreferences,
             UiLanguage uiLanguage
@@ -382,6 +391,7 @@ public final class SettingsDialog {
                 model.getText(),
                 vadModel.getText(),
                 temporaryDirectory.getText(),
+                managedStorageDirectory.getText(),
                 subtitlePreferences,
                 outputPreferences,
                 uiLanguage

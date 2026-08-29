@@ -42,6 +42,29 @@ class SettingsPathsTest {
         }
     }
 
+    @Test
+    void selectedManagedStorageOverridesTheDataDirectory() {
+        Path selected = temporaryDirectory.resolve("large-model-disk");
+        ApplicationSettings settings = ApplicationSettings.defaults()
+                .withManagedStorageDirectory(selected.toString());
+
+        assertEquals(selected.toAbsolutePath(), SettingsPaths.managedStorageDirectory(settings));
+    }
+
+    @Test
+    void blankManagedStorageKeepsExistingApplicationDataLayout() {
+        String previous = System.getProperty("lss.data.path");
+        try {
+            Path data = temporaryDirectory.resolve("existing-data");
+            System.setProperty("lss.data.path", data.toString());
+
+            assertEquals(data.toAbsolutePath(),
+                    SettingsPaths.managedStorageDirectory(ApplicationSettings.defaults()));
+        } finally {
+            restore("lss.data.path", previous);
+        }
+    }
+
     private static void restore(String name, String value) {
         if (value == null) {
             System.clearProperty(name);

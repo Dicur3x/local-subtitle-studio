@@ -82,6 +82,9 @@ public final class ComponentsDialog {
         Label explanation = new Label(tr("components.explanation"));
         explanation.setWrapText(true);
         explanation.getStyleClass().add("muted");
+        Label storage = new Label(tr("components.storagePath", toolsService.managedStorageDirectory()));
+        storage.setWrapText(true);
+        storage.getStyleClass().add("component-license");
 
         VBox components = new VBox(12);
         for (ManagedComponent component : ManagedComponent.values()) {
@@ -118,7 +121,7 @@ public final class ComponentsDialog {
         VBox downloadState = new VBox(8, componentActions, progressRow, operationStatus);
 
         VBox modelCard = createModelCard();
-        VBox content = new VBox(18, explanation, components, downloadState, modelCard);
+        VBox content = new VBox(18, explanation, storage, components, downloadState, modelCard);
         content.setPadding(new Insets(8));
 
         ScrollPane scrollPane = new ScrollPane(content);

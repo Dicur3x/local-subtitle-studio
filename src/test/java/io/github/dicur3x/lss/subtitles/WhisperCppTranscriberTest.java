@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -152,6 +153,39 @@ class WhisperCppTranscriberTest {
 
         assertEquals(Duration.ZERO, exception.position());
         assertEquals(2, calls.get());
+    }
+
+    @Test
+    void skipsWhisperForACompletedRecoveryChunk() throws Exception {
+        Path audio = TestAudioFiles.writeCanonicalWav(temporaryDirectory.resolve("audio.wav"), 2);
+        Path model = Files.write(temporaryDirectory.resolve("model.bin"), new byte[]{2});
+        Path vad = Files.write(temporaryDirectory.resolve("vad.bin"), new byte[]{3});
+        AtomicInteger calls = new AtomicInteger();
+        TranscriptionCheckpointStore checkpoints = new TranscriptionCheckpointStore() {
+            @Override
+            public Optional<TranscriptionResult> load(RecognitionChunkKey chunk) {
+                return Optional.of(new TranscriptionResult("ru", List.of(
+                        new RecognizedSegment(1, Duration.ofMillis(100), Duration.ofMillis(600),
+                                "Уже готово", List.of()))));
+            }
+
+            @Override
+            public void save(RecognitionChunkKey chunk, TranscriptionResult result) {
+                throw new AssertionError("A restored chunk must not be saved again");
+            }
+        };
+        WhisperCppTranscriber transcriber = new WhisperCppTranscriber(
+                "whisper-cli", model, vad,
+                (command, cancellation) -> {
+                    calls.incrementAndGet();
+                    return new ProcessResult(0, "", "");
+                }, new WhisperJsonParser(new ObjectMapper()));
+
+        TranscriptionResult result = transcriber.transcribe(
+                audio, "ru", () -> false, percent -> { }, checkpoints);
+
+        assertEquals(0, calls.get());
+        assertEquals("Уже готово", result.segments().getFirst().text());
     }
 
     private static String transcription(long from, long to, String text) {
