@@ -2,6 +2,8 @@ package io.github.dicur3x.lss.infrastructure.process;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
@@ -11,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 public final class DefaultExternalProcessRunner implements ExternalProcessRunner {
     private static final long CANCELLATION_POLL_MILLIS = 100;
@@ -18,8 +21,20 @@ public final class DefaultExternalProcessRunner implements ExternalProcessRunner
     @Override
     public ProcessResult run(List<String> command, BooleanSupplier cancellationRequested)
             throws IOException, InterruptedException {
+        return runStreaming(command, cancellationRequested, line -> { }, line -> { });
+    }
+
+    @Override
+    public ProcessResult runStreaming(
+            List<String> command,
+            BooleanSupplier cancellationRequested,
+            Consumer<String> standardOutputLine,
+            Consumer<String> standardErrorLine
+    ) throws IOException, InterruptedException {
         Objects.requireNonNull(command, "command");
         Objects.requireNonNull(cancellationRequested, "cancellationRequested");
+        Objects.requireNonNull(standardOutputLine, "standardOutputLine");
+        Objects.requireNonNull(standardErrorLine, "standardErrorLine");
         if (command.isEmpty()) {
             throw new IllegalArgumentException("command must not be empty");
         }
@@ -28,8 +43,10 @@ public final class DefaultExternalProcessRunner implements ExternalProcessRunner
         process.getOutputStream().close();
 
         try (var readers = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<String> standardOutput = readers.submit(() -> readUtf8(process.getInputStream()));
-            Future<String> standardError = readers.submit(() -> readUtf8(process.getErrorStream()));
+            Future<String> standardOutput = readers.submit(
+                    () -> readUtf8Lines(process.getInputStream(), standardOutputLine));
+            Future<String> standardError = readers.submit(
+                    () -> readUtf8Lines(process.getErrorStream(), standardErrorLine));
 
             while (!process.waitFor(CANCELLATION_POLL_MILLIS, TimeUnit.MILLISECONDS)) {
                 if (cancellationRequested.getAsBoolean()) {
@@ -53,10 +70,20 @@ public final class DefaultExternalProcessRunner implements ExternalProcessRunner
         }
     }
 
-    private static String readUtf8(InputStream inputStream) throws IOException {
-        try (inputStream) {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+    private static String readUtf8Lines(InputStream inputStream, Consumer<String> lineConsumer)
+            throws IOException {
+        StringBuilder output = new StringBuilder();
+        try (var reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!output.isEmpty()) {
+                    output.append(System.lineSeparator());
+                }
+                output.append(line);
+                lineConsumer.accept(line);
+            }
         }
+        return output.toString();
     }
 
     private static String getReaderResult(Future<String> reader) throws IOException, InterruptedException {

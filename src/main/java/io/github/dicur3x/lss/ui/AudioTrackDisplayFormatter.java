@@ -6,13 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import static io.github.dicur3x.lss.ui.I18n.tr;
+
 public final class AudioTrackDisplayFormatter {
     public String format(AudioTrack track) {
         List<String> parts = new ArrayList<>();
         parts.add(track.streamIndex() + ". " + trackName(track));
         parts.add(codecName(track.codec()));
         parts.add(channelName(track));
-        track.bitrate().ifPresent(value -> parts.add(Math.round(value / 1_000d) + " kbps"));
+        track.bitrate().ifPresent(value -> parts.add(Math.round(value / 1_000d) + " " + tr("audio.kbps")));
         track.sampleRate().ifPresent(value -> parts.add(formatSampleRate(value)));
         return String.join("  ·  ", parts.stream().filter(part -> !part.isBlank()).toList());
     }
@@ -22,7 +24,7 @@ public final class AudioTrackDisplayFormatter {
         if (track.title().isBlank()) {
             return language;
         }
-        if (language.equals("Unknown language")) {
+        if (language.equals(tr("audio.unknownLanguage"))) {
             return track.title();
         }
         if (track.title().toLowerCase(Locale.ROOT).contains(language.toLowerCase(Locale.ROOT))) {
@@ -33,10 +35,10 @@ public final class AudioTrackDisplayFormatter {
 
     private static String languageName(String code) {
         if (code.isBlank() || code.equalsIgnoreCase("und")) {
-            return "Unknown language";
+            return tr("audio.unknownLanguage");
         }
         String normalized = code.replace('_', '-');
-        String displayName = Locale.forLanguageTag(normalized).getDisplayLanguage(Locale.ENGLISH);
+        String displayName = Locale.forLanguageTag(normalized).getDisplayLanguage(I18n.locale());
         if (displayName.isBlank()) {
             return code.toUpperCase(Locale.ROOT);
         }
@@ -45,7 +47,7 @@ public final class AudioTrackDisplayFormatter {
 
     private static String codecName(String codec) {
         if (codec.isBlank()) {
-            return "Unknown codec";
+            return tr("audio.unknownCodec");
         }
         return switch (codec.toLowerCase(Locale.ROOT)) {
             case "eac3" -> "E-AC3";
@@ -61,25 +63,25 @@ public final class AudioTrackDisplayFormatter {
     private static String channelName(AudioTrack track) {
         if (!track.channelLayout().isBlank()) {
             return switch (track.channelLayout().toLowerCase(Locale.ROOT)) {
-                case "mono" -> "Mono";
-                case "stereo" -> "Stereo";
+                case "mono" -> tr("audio.mono");
+                case "stereo" -> tr("audio.stereo");
                 default -> track.channelLayout();
             };
         }
         return switch (track.channels()) {
-            case 1 -> "Mono";
-            case 2 -> "Stereo";
+            case 1 -> tr("audio.mono");
+            case 2 -> tr("audio.stereo");
             case 6 -> "5.1";
             case 8 -> "7.1";
-            case 0 -> "Unknown channels";
-            default -> track.channels() + " channels";
+            case 0 -> tr("audio.unknownChannels");
+            default -> tr("audio.channelCount", track.channels());
         };
     }
 
     private static String formatSampleRate(int sampleRate) {
         if (sampleRate % 1_000 == 0) {
-            return (sampleRate / 1_000) + " kHz";
+            return (sampleRate / 1_000) + " " + tr("audio.khz");
         }
-        return String.format(Locale.ROOT, "%.1f kHz", sampleRate / 1_000d);
+        return String.format(Locale.ROOT, "%.1f %s", sampleRate / 1_000d, tr("audio.khz"));
     }
 }

@@ -66,7 +66,7 @@ public final class FfprobeMediaProbe implements MediaProbe {
             LOGGER.log(Level.SEVERE, "Could not start or read ffprobe", exception);
             if (isExecutableMissing(exception)) {
                 throw new MediaProbeException(
-                        "ffprobe was not found. Install FFmpeg or set LSS_FFPROBE_PATH.", exception);
+                        "ffprobe was not found. Open Settings and choose ffprobe.exe.", exception);
             }
             throw new MediaProbeException("Could not read ffprobe output.", exception);
         }
