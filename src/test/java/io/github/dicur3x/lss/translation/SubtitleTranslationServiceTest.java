@@ -46,7 +46,6 @@ class SubtitleTranslationServiceTest {
             assertEquals("Перевод " + source.id(), translated.originalText());
             assertTrue(translated.tokens().isEmpty(), "Source-language word timings must not be reused");
         }
-        assertEquals("Cue 1\nПеревод 1", result.bilingualCues().getFirst().originalText());
     }
 
     @Test

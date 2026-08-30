@@ -112,6 +112,12 @@ Feature-length audio is additionally divided into overlapping eight-minute recog
 
 ## Recognition correction
 
+### Recognition-engine scope
+
+The public Alpha 2 currently uses whisper.cpp, but the project does not claim that it is the fastest or most capable Whisper runtime. [Faster-Whisper-XXL](https://github.com/Purfview/whisper-standalone-win) already provides a strong standalone engine with movie-oriented defaults, CUDA selection, several VAD implementations, vocal extraction, diarization, and batch processing; [Subtitle Edit](https://subtitleedit.github.io/subtitleedit/features/speech-to-text.html) already integrates it in a mature editor. For immediate production work, that combination is currently more complete than this alpha.
+
+Local Subtitle Studio will therefore move recognition behind a replaceable engine boundary. A user-supplied Faster-Whisper-XXL executable is a planned benchmark/backend, while whisper.cpp remains useful for a fully licensed open implementation and future Vulkan testing on AMD/Intel GPUs. The Faster-Whisper-XXL wrapper repository currently publishes binaries, a README, and a changelog without the wrapper source or a repository licence; it will not be bundled or automatically downloaded unless its redistribution terms become explicit. See [ADR 0009](docs/architecture/0009-replaceable-recognition-engines.md).
+
 Deterministic cleanup currently fixes spacing, line breaks, and close exact duplicates, then flags low-confidence cues. Repairing names, terminology, and contextually broken phrases needs a separate local language model. The planned optional stage uses `llama.cpp`, neighbouring cues, Whisper confidence, and a user glossary. It must return reviewable structured suggestions, retain the original transcript and edit log, and never change timestamps. See [ADR 0007](docs/architecture/0007-contextual-subtitle-correction.md).
 
 ## Mixed languages, translation, and voice-over
@@ -125,7 +131,7 @@ These cases are deliberately not presented as finished one-click features yet:
 
 See [ADR 0005](docs/architecture/0005-multilingual-dialogue-and-voice-over.md) for the proposed modes, filenames, and acceptance criteria.
 
-Translation development is in progress. The Components screen can now install a checksummed official llama.cpp Windows build and one of three checksummed official Qwen3 GGUF profiles. The recommended 4B profile passed a contextual sample from a real SRT after adaptive rechecking corrected a suspicious duplicated translation. The pipeline preserves cue IDs and timestamps, constrains generated IDs, and rejects missing/duplicate/invented IDs. Translation is intentionally not exposed in the main creation flow until broader English↔Russian quality and output tests pass. See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
+Translation development is in progress. The Components screen can install a checksummed official llama.cpp Windows build and one of three checksummed official Qwen3 GGUF profiles. On the development branch, a successful original SRT now exposes **Translate SRT…**: the dialog reuses the searchable language selector, always keeps the recognized original, and writes every requested target language as a separate collision-safe SRT. The recommended 4B profile passed a contextual sample from a real SRT after adaptive rechecking corrected a suspicious duplicated translation. The pipeline preserves cue IDs and timestamps, constrains generated IDs, and rejects missing/duplicate/invented IDs. It deliberately calls the result a draft: humour, cultural references, character voice, names, and ambiguous context still require human review. Translation remains experimental until broader English↔Russian runtime, player, review, and recovery tests pass. See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
 
 ## Test
 

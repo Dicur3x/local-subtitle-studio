@@ -21,10 +21,10 @@ This file keeps product requirements visible outside the chat history. “Planne
 - [x] Context batches with stable cue IDs and strict missing/duplicate/invented-ID rejection.
 - [x] Local llama.cpp structured-output adapter.
 - [x] Managed llama.cpp installation and curated, licensed Qwen3 GGUF profiles with exact checksums and disk-size display.
-- [ ] Main-screen source/target language controls without duplicating the existing language search UI.
-- [ ] Explicit output choices: original, translated, both separate files, and optional bilingual SRT.
+- [x] Post-creation source/target language controls that reuse the searchable language picker.
+- [x] Non-overwriting output choices: the recognized original and every requested target language are separate SRT files.
 - [ ] English→Russian and Russian→English real-media quality/runtime tests.
-- [ ] Translation review, cancellation, recovery, and localized errors in the complete UI pipeline.
+- [ ] Translation review and recovery in the complete UI pipeline. Cancellation and localized setup/runtime errors are implemented.
 
 See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
 
@@ -45,8 +45,14 @@ See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
 ### Multiple files and tracks
 
 - [ ] Batch queue with per-file status, cancellation, retry, collision-safe output, and a final summary.
-- [ ] Select more than one audio track and choose recognition/translation outputs per track.
+- [ ] Select more than one audio track and create separate recognition/translation SRT files per track and language.
 - [ ] Reuse a loaded local model across queue items where safe.
+
+### Recognition engines
+
+- [ ] Add a replaceable recognition-engine boundary instead of coupling the product to whisper.cpp.
+- [ ] Evaluate user-supplied Faster-Whisper-XXL against the current full-film timing and repetition cases; do not bundle or auto-download its wrapper unless its redistribution terms become explicit.
+- [ ] Evaluate whisper.cpp Vulkan acceleration for AMD/Intel GPUs and compare quality, runtime, RAM, and recovery behavior with Faster-Whisper-XXL on CPU/NVIDIA CUDA.
 
 Batch processing starts only after the single-file translation path is verified end to end.
 

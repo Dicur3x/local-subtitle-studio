@@ -25,6 +25,8 @@ import io.github.dicur3x.lss.settings.SettingsManager;
 import io.github.dicur3x.lss.settings.SettingsPaths;
 import io.github.dicur3x.lss.subtitles.SubtitleCreationService;
 import io.github.dicur3x.lss.subtitles.WhisperSubtitleCreationService;
+import io.github.dicur3x.lss.translation.LocalSubtitleTranslationWorkflow;
+import io.github.dicur3x.lss.translation.SubtitleTranslationWorkflow;
 import io.github.dicur3x.lss.ui.MainView;
 import io.github.dicur3x.lss.ui.ComponentsDialog;
 import io.github.dicur3x.lss.ui.SettingsDialog;
@@ -87,8 +89,10 @@ public final class LocalSubtitleStudioApplication extends Application {
                 ).extract(file, streamIndex, cancellationRequested);
         SubtitleCreationService subtitleCreationService = new WhisperSubtitleCreationService(
                 settingsManager::current, processRunner, objectMapper, recoveryStore);
+        SubtitleTranslationWorkflow translationWorkflow = new LocalSubtitleTranslationWorkflow(
+                settingsManager::current, processRunner, objectMapper);
         mainView = new MainView(
-                mediaProbe, audioExtractor, subtitleCreationService, recoveryStore,
+                mediaProbe, audioExtractor, subtitleCreationService, translationWorkflow, recoveryStore,
                 this::showComponents, this::showSettings);
 
         Scene scene = new Scene(mainView.root(), 920, 690);

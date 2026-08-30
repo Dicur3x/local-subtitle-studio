@@ -77,4 +77,25 @@ class SrtWriterTest {
         assertTrue(contents.contains("Исправленный текст"));
         assertEquals("leave intact", Files.readString(neighbour));
     }
+
+    @Test
+    void writesTranslatedVariantBesideTheOriginalWithoutOverwriting() throws Exception {
+        Path original = Files.writeString(temporaryDirectory.resolve("film.ru.2.srt"), "original");
+        Files.writeString(temporaryDirectory.resolve("film.en.srt"), "existing translation");
+        SubtitleCue translated = new SubtitleCue(
+                1, Duration.ZERO, Duration.ofSeconds(2), "Hello", List.of());
+        SubtitleCue secondTranslation = new SubtitleCue(
+                1, Duration.ZERO, Duration.ofSeconds(2), "Bonjour", List.of());
+        SrtWriter writer = new SrtWriter();
+
+        Path translatedFile = writer.writeTranslated(original, "ru", "en", List.of(translated));
+        Path secondLanguageFile = writer.writeTranslated(
+                original, "ru", "fr", List.of(secondTranslation));
+
+        assertEquals("film.en.2.srt", translatedFile.getFileName().toString());
+        assertEquals("film.fr.srt", secondLanguageFile.getFileName().toString());
+        assertEquals("existing translation",
+                Files.readString(temporaryDirectory.resolve("film.en.srt")));
+        assertTrue(Files.readString(secondLanguageFile).contains("Bonjour"));
+    }
 }

@@ -29,15 +29,4 @@ public record TranslatedSubtitles(
             }
         }
     }
-
-    public List<SubtitleCue> bilingualCues() {
-        return java.util.stream.IntStream.range(0, originalCues.size())
-                .mapToObj(index -> {
-                    SubtitleCue original = originalCues.get(index);
-                    SubtitleCue translated = translatedCues.get(index);
-                    return new SubtitleCue(
-                            original.id(), original.start(), original.end(),
-                            original.originalText() + "\n" + translated.originalText(), List.of());
-                }).toList();
-    }
 }
