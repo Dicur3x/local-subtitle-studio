@@ -247,7 +247,7 @@ public final class ComponentsDialog {
                 return translationModelProfiles.getValue();
             }
         });
-        translationModelProfiles.getSelectionModel().select(TranslationModelProfile.BALANCED);
+        translationModelProfiles.getSelectionModel().select(TranslationModelProfile.MAXIMUM_QUALITY);
         translationModelProfiles.setMaxWidth(Double.MAX_VALUE);
         translationModelProfiles.valueProperty().addListener(
                 (observable, oldProfile, newProfile) -> updateTranslationModelChoice());

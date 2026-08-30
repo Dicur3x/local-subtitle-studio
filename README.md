@@ -125,7 +125,7 @@ These cases are deliberately not presented as finished one-click features yet:
 
 See [ADR 0005](docs/architecture/0005-multilingual-dialogue-and-voice-over.md) for the proposed modes, filenames, and acceptance criteria.
 
-Translation development is in progress. The Components screen can now install a checksummed official llama.cpp Windows build and one of three checksummed official Qwen3 GGUF profiles, while the implemented pipeline batches 12 target cues with neighbouring context, preserves cue IDs and timestamps, and rejects missing/duplicate/invented IDs. Translation is intentionally not exposed in the main creation flow until real English↔Russian quality and output tests pass. See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
+Translation development is in progress. The Components screen can now install a checksummed official llama.cpp Windows build and one of three checksummed official Qwen3 GGUF profiles. The recommended 4B profile passed a contextual sample from a real SRT after adaptive rechecking corrected a suspicious duplicated translation. The pipeline preserves cue IDs and timestamps, constrains generated IDs, and rejects missing/duplicate/invented IDs. Translation is intentionally not exposed in the main creation flow until broader English↔Russian quality and output tests pass. See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
 
 ## Test
 

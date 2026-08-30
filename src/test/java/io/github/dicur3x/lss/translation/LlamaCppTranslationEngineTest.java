@@ -28,7 +28,9 @@ class LlamaCppTranslationEngineTest {
             captured.addAll(command);
             Path schemaFile = Path.of(command.get(command.indexOf("--json-schema-file") + 1));
             schemaFiles.add(schemaFile);
-            assertTrue(Files.readString(schemaFile).contains("\"translations\""));
+            String schema = Files.readString(schemaFile);
+            assertTrue(schema.contains("\"translations\""));
+            assertTrue(schema.contains("\"enum\":[2]"));
             String prompt = command.get(command.indexOf("--prompt") + 1);
             assertTrue(prompt.contains("from en to ru"));
             assertTrue(prompt.contains("ID: 1"));

@@ -16,9 +16,9 @@ public enum TranslationModelProfile {
     ),
     BALANCED(
             "balanced",
-            "Balanced (recommended)",
+            "Balanced",
             "Qwen3 1.7B Q8_0",
-            "A practical CPU profile with better context, names, and phrasing than the fast model.",
+            "A faster compromise with better context than the fast model. Its grammar still needs careful review.",
             "Qwen/Qwen3-1.7B-GGUF",
             "Qwen3-1.7B-Q8_0.gguf",
             1_834_426_016L,
@@ -26,9 +26,9 @@ public enum TranslationModelProfile {
     ),
     MAXIMUM_QUALITY(
             "maximum-quality",
-            "Maximum quality",
+            "Maximum quality (recommended)",
             "Qwen3 4B Q4_K_M",
-            "The strongest curated profile here. It is slower and needs substantially more memory and disk space.",
+            "The recommended profile for natural subtitle drafts. It is slower and needs more memory and disk space.",
             "Qwen/Qwen3-4B-GGUF",
             "Qwen3-4B-Q4_K_M.gguf",
             2_497_280_256L,

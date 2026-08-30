@@ -87,6 +87,57 @@ class SubtitleTranslationServiceTest {
                         List.of(cue(1)), "en", "ru", () -> true, ignored -> { }));
     }
 
+    @Test
+    void retriesOnlySuspiciousLongDuplicateTranslationsOneCueAtATime() throws Exception {
+        List<TranslationBatch> batches = new ArrayList<>();
+        TranslationEngine engine = (batch, cancellationRequested) -> {
+            batches.add(batch);
+            if (batch.requestedIds().size() > 1) {
+                return new TranslationBatchResult(List.of(
+                        new TranslatedText(1, "You are a fool and selfish"),
+                        new TranslatedText(2, "I will go home immediately"),
+                        new TranslatedText(3, "You are a fool and selfish")));
+            }
+            long id = batch.requestedIds().getFirst();
+            return new TranslationBatchResult(List.of(new TranslatedText(
+                    id, id == 1 ? "You should not have started this" : "You are a fool and selfish")));
+        };
+        List<SubtitleCue> source = List.of(
+                cue(1, "Зря ты это затеял"),
+                cue(2, "Я сразу вернусь домой"),
+                cue(3, "Ты глупыш и эгоист"));
+
+        TranslatedSubtitles result = new SubtitleTranslationService(engine, 3, 1)
+                .translate(source, "ru", "en", () -> false, ignored -> { });
+
+        assertEquals(3, batches.size());
+        assertEquals(List.of(1L), batches.get(1).requestedIds());
+        assertEquals(List.of(3L), batches.get(2).requestedIds());
+        assertEquals("You should not have started this",
+                result.translatedCues().getFirst().originalText());
+        assertEquals("You are a fool and selfish",
+                result.translatedCues().getLast().originalText());
+    }
+
+    @Test
+    void keepsLegitimateRepeatedDialogueWithoutExtraModelCalls() throws Exception {
+        List<TranslationBatch> batches = new ArrayList<>();
+        TranslationEngine engine = (batch, cancellationRequested) -> {
+            batches.add(batch);
+            return new TranslationBatchResult(List.of(
+                    new TranslatedText(1, "Michael, what are you doing?"),
+                    new TranslatedText(2, "Michael, what are you doing?")));
+        };
+
+        TranslatedSubtitles result = new SubtitleTranslationService(engine, 2, 1)
+                .translate(List.of(cue(1, "Майкл, ты что?"), cue(2, "Майкл, ты что?")),
+                        "ru", "en", () -> false, ignored -> { });
+
+        assertEquals(1, batches.size());
+        assertEquals(result.translatedCues().getFirst().originalText(),
+                result.translatedCues().getLast().originalText());
+    }
+
     private static List<Long> ids(List<TranslationCueInput> cues) {
         return cues.stream().map(TranslationCueInput::id).toList();
     }
@@ -96,5 +147,10 @@ class SubtitleTranslationServiceTest {
         return new SubtitleCue(
                 id, start, start.plusSeconds(1), "Cue " + id,
                 List.of(new TokenTiming("Cue", start, start.plusMillis(400), 0.9)));
+    }
+
+    private static SubtitleCue cue(long id, String text) {
+        Duration start = Duration.ofSeconds(id * 2);
+        return new SubtitleCue(id, start, start.plusSeconds(1), text, List.of());
     }
 }

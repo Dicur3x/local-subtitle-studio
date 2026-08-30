@@ -91,6 +91,15 @@ tasks.register<Test>("realMediaTest") {
     providers.gradleProperty("realTranslationModel").orNull?.let {
         systemProperty("lss.real.translation.model", it)
     }
+    providers.gradleProperty("realTranslationSrt").orNull?.let {
+        systemProperty("lss.real.translation.srt", it)
+    }
+    providers.gradleProperty("realTranslationStartCue").orNull?.let {
+        systemProperty("lss.real.translation.start.cue", it)
+    }
+    providers.gradleProperty("realTranslationBatchSize").orNull?.let {
+        systemProperty("lss.real.translation.batch.size", it)
+    }
 }
 
 val prepareJpackageInput = tasks.register<Sync>("prepareJpackageInput") {

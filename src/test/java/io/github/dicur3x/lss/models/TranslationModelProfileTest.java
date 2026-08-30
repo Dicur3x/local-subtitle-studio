@@ -22,9 +22,9 @@ class TranslationModelProfileTest {
     }
 
     @Test
-    void balancedProfileIsTheRecommendedDefault() {
+    void maximumQualityProfileIsTheRecommendedDefault() {
         assertTrue(Arrays.stream(TranslationModelProfile.values())
-                .anyMatch(profile -> profile == TranslationModelProfile.BALANCED
+                .anyMatch(profile -> profile == TranslationModelProfile.MAXIMUM_QUALITY
                         && profile.displayName().contains("recommended")));
     }
 }

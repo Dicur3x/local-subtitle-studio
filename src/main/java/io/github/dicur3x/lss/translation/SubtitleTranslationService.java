@@ -17,6 +17,7 @@ import java.util.function.IntConsumer;
 public final class SubtitleTranslationService {
     public static final int DEFAULT_BATCH_SIZE = 12;
     public static final int DEFAULT_CONTEXT_CUES = 2;
+    private static final int SUSPICIOUS_DUPLICATE_MINIMUM_CHARACTERS = 12;
 
     private final TranslationEngine engine;
     private final int batchSize;
@@ -67,6 +68,8 @@ public final class SubtitleTranslationService {
             TranslationBatch batch = new TranslationBatch(sourceLanguage, targetLanguage, inputs);
             TranslationBatchResult result = engine.translate(batch, cancellationRequested);
             validateAndAppend(batch, result, translatedById);
+            retrySuspiciousDuplicates(safeCues, targetFrom, targetTo,
+                    sourceLanguage, targetLanguage, translatedById, cancellationRequested);
             progress.accept((batchIndex + 1) * 100 / batchCount);
         }
 
@@ -74,6 +77,69 @@ public final class SubtitleTranslationService {
                 cue.id(), cue.start(), cue.end(), translatedById.get(cue.id()), List.of())).toList();
         return new TranslatedSubtitles(
                 sourceLanguage, targetLanguage, safeCues, translatedCues);
+    }
+
+    private void retrySuspiciousDuplicates(
+            List<SubtitleCue> cues,
+            int targetFrom,
+            int targetTo,
+            String sourceLanguage,
+            String targetLanguage,
+            Map<Long, String> translatedById,
+            BooleanSupplier cancellationRequested
+    ) throws TranslationException {
+        Map<String, List<Integer>> indexesByTranslation = new HashMap<>();
+        for (int index = targetFrom; index < targetTo; index++) {
+            SubtitleCue cue = cues.get(index);
+            String normalized = normalizedText(translatedById.get(cue.id()));
+            if (normalized.length() >= SUSPICIOUS_DUPLICATE_MINIMUM_CHARACTERS) {
+                indexesByTranslation.computeIfAbsent(normalized, ignored -> new ArrayList<>()).add(index);
+            }
+        }
+        for (List<Integer> indexes : indexesByTranslation.values()) {
+            if (indexes.size() < 2 || haveSameSourceText(cues, indexes)) {
+                continue;
+            }
+            for (int index : indexes) {
+                throwIfCancelled(cancellationRequested);
+                TranslationBatch retryBatch = singleCueBatch(
+                        cues, index, sourceLanguage, targetLanguage);
+                Map<Long, String> retried = new HashMap<>();
+                validateAndAppend(retryBatch,
+                        engine.translate(retryBatch, cancellationRequested), retried);
+                long id = cues.get(index).id();
+                translatedById.put(id, retried.get(id));
+            }
+        }
+    }
+
+    private TranslationBatch singleCueBatch(
+            List<SubtitleCue> cues,
+            int targetIndex,
+            String sourceLanguage,
+            String targetLanguage
+    ) {
+        int from = Math.max(0, targetIndex - contextCues);
+        int to = Math.min(cues.size(), targetIndex + contextCues + 1);
+        List<TranslationCueInput> inputs = new ArrayList<>(to - from);
+        for (int index = from; index < to; index++) {
+            SubtitleCue cue = cues.get(index);
+            inputs.add(new TranslationCueInput(cue.id(), cue.originalText(), index == targetIndex));
+        }
+        return new TranslationBatch(sourceLanguage, targetLanguage, inputs);
+    }
+
+    private static boolean haveSameSourceText(List<SubtitleCue> cues, List<Integer> indexes) {
+        String first = normalizedText(cues.get(indexes.getFirst()).originalText());
+        return indexes.stream().skip(1)
+                .allMatch(index -> normalizedText(cues.get(index).originalText()).equals(first));
+    }
+
+    private static String normalizedText(String value) {
+        return Objects.requireNonNullElse(value, "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                .strip();
     }
 
     private static void validateAndAppend(
