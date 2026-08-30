@@ -2,7 +2,8 @@ package io.github.dicur3x.lss.components;
 
 public enum ManagedComponent {
     FFMPEG("ffmpeg", "FFmpeg"),
-    WHISPER_CPP("whisper-cpp", "whisper.cpp");
+    WHISPER_CPP("whisper-cpp", "whisper.cpp"),
+    LLAMA_CPP("llama-cpp", "llama.cpp");
 
     private final String id;
     private final String displayName;

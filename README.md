@@ -4,6 +4,8 @@
 
 Local Subtitle Studio is a desktop application for creating subtitles from video while keeping media on the user's computer. The first supported platform is Windows.
 
+The current implementation status and intentionally pending requirements are tracked in [`ROADMAP.md`](ROADMAP.md).
+
 > Status: early MVP development. The current build can install its local toolchain and create an experimental original-language SRT locally from a selected video audio track.
 
 ## Current features
@@ -11,13 +13,14 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - Drag-and-drop or file picker for local video files.
 - Asynchronous media inspection, so the UI remains responsive.
 - Audio track details: language metadata, title, codec, channel layout, bitrate, and sample rate.
-- One-click recommended setup plus a separate updater for FFmpeg/FFprobe and stable whisper.cpp releases that never changes the selected model.
+- One-click recognition setup plus a separate updater for FFmpeg/FFprobe, whisper.cpp, and llama.cpp that never changes the selected model.
 - Download progress bars with transferred sizes and exact percentages when the source reports a total size.
 - Release-note text inside the application after a version check, with an optional link to the upstream source.
 - Fast, Balanced, and Maximum quality Whisper model profiles; each model installs together with Silero VAD.
+- Separate Fast, Balanced, and Maximum quality local translation profiles based on official Qwen3 GGUF files. Translation models are optional and download only after an explicit click.
 - HTTPS downloads, safe ZIP extraction, size limits, exact model checksums, and published component checksums when available.
 - Automatic activation of managed tools, with manual path overrides in Advanced settings.
-- Persistent paths for `ffmpeg`, `ffprobe`, `whisper-cli`, Whisper and VAD models, and temporary files.
+- Persistent paths for `ffmpeg`, `ffprobe`, `whisper-cli`, `llama-cli`, recognition/translation models, and temporary files. Manual technical paths stay collapsed for advanced users.
 - Built-in tool-path validation from the Advanced settings dialog.
 - Extraction of the selected stream to temporary 16 kHz, mono, signed 16-bit PCM WAV.
 - Local whisper.cpp recognition with an integrated searchable choice of all 100 supported languages, Silero VAD, full token timestamps, and speech-boundary-aware subtitle timing.
@@ -31,7 +34,7 @@ Local Subtitle Studio is a desktop application for creating subtitles from video
 - Conservative duplicate-cue cleanup, cautious restoration of unambiguous Russian `ё` forms, and low-confidence warnings; flagged cues can be reviewed and edited in the application without changing timestamps.
 - UTF-8 SRT export beside the source video, in a `Subs` folder, or in a chosen folder; an existing subtitle file is never overwritten.
 - English UI by default with an optional Russian translation, plus a minimal first-run guide.
-- A self-contained Windows portable ZIP is published as an explicitly marked prerelease for early testing.
+- A self-contained Windows portable ZIP is published as an explicitly marked public alpha for early testing.
 - Cancellation of active inspection, audio-preparation, and transcription processes.
 - Automatic removal of temporary recognition audio after the operation.
 
@@ -47,15 +50,15 @@ Download the latest Windows ZIP from [GitHub Releases](https://github.com/Dicur3
 4. Let the guide open **Components**, then install the recommended tools and a model.
 5. Choose a video, audio track, and spoken language, then select **Create SRT**.
 
-The prerelease is intended for early testing and includes its own Java runtime. The normal app image stores settings and managed downloads below `%LOCALAPPDATA%\LocalSubtitleStudio`. The portable ZIP contains a `portable.mode` marker and stores them in `data` beside the launcher. Neither mode changes the system `PATH` or requires administrator rights.
+The alpha is intended for early testing and includes its own Java runtime. The normal app image stores settings and managed downloads below `%LOCALAPPDATA%\LocalSubtitleStudio`. The portable ZIP contains a `portable.mode` marker and stores them in `data` beside the launcher. Neither mode changes the system `PATH` or requires administrator rights.
 
 ## Developer requirements
 
 - A JDK 17 or newer to start Gradle. The build pins its daemon/compiler/runtime to JDK 21 and can provision that toolchain automatically when it is missing.
-- Enough local disk space for the selected model (about 190 MB, 574 MB, or 3.1 GB) and temporary audio.
+- Enough local disk space for the selected recognition model (about 190 MB, 574 MB, or 3.1 GB), an optional translation model (about 610 MB, 1.7 GB, or 2.3 GB), and temporary audio.
 - Windows 10/11 for the currently tested build. The code avoids Windows-only process invocation so Linux and macOS can be added later.
 
-FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. Existing executables on `PATH` or custom files chosen in **Advanced settings** remain supported.
+FFmpeg/FFprobe, whisper.cpp, llama.cpp, and recognition/translation models can be installed from **Components**. Existing executables on `PATH` or custom files chosen in the collapsed advanced-path section remain supported.
 
 ## Run from IntelliJ IDEA or a terminal
 
@@ -63,7 +66,7 @@ FFmpeg/FFprobe, whisper.cpp, and a model can be installed from **Components**. E
 .\gradlew.bat run
 ```
 
-Open **Components** and choose **Set up recommended tools + model** to prepare FFmpeg/FFprobe, stable whisper.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg + whisper.cpp** updates only those program components and preserves the selected model. Models remain separately selectable. The application never installs an update silently. **Advanced settings** contains one storage folder for managed programs, models, and recoverable work; changing it affects future downloads and does not move existing files automatically.
+Open **Components** and choose **Set up programs + recommended recognition model** to prepare FFmpeg/FFprobe, whisper.cpp, llama.cpp, the Balanced Whisper model, and Silero VAD in one operation. **Update FFmpeg, whisper.cpp, and llama.cpp** updates only program components and preserves every selected model. Recognition and translation models remain separately selectable. The application never installs an update silently. **Advanced settings** contains one storage folder for managed programs, models, and recoverable work; changing it affects future downloads and does not move existing files automatically.
 
 After choosing a video and audio track, leave **Spoken language** on **Auto detect** or select it manually, then press **Create SRT**. The output location is selected in **Advanced settings**. If the destination name already exists, a numbered file is created instead.
 
@@ -109,6 +112,12 @@ Feature-length audio is additionally divided into overlapping eight-minute recog
 
 ## Recognition correction
 
+### Recognition-engine scope
+
+The public Alpha 2 currently uses whisper.cpp, but the project does not claim that it is the fastest or most capable Whisper runtime. [Faster-Whisper-XXL](https://github.com/Purfview/whisper-standalone-win) already provides a strong standalone engine with movie-oriented defaults, CUDA selection, several VAD implementations, vocal extraction, diarization, and batch processing; [Subtitle Edit](https://subtitleedit.github.io/subtitleedit/features/speech-to-text.html) already integrates it in a mature editor. For immediate production work, that combination is currently more complete than this alpha.
+
+Local Subtitle Studio will therefore move recognition behind a replaceable engine boundary. A user-supplied Faster-Whisper-XXL executable is a planned benchmark/backend, while whisper.cpp remains useful for a fully licensed open implementation and future Vulkan testing on AMD/Intel GPUs. The Faster-Whisper-XXL wrapper repository currently publishes binaries, a README, and a changelog without the wrapper source or a repository licence; it will not be bundled or automatically downloaded unless its redistribution terms become explicit. See [ADR 0009](docs/architecture/0009-replaceable-recognition-engines.md).
+
 Deterministic cleanup currently fixes spacing, line breaks, and close exact duplicates, then flags low-confidence cues. Repairing names, terminology, and contextually broken phrases needs a separate local language model. The planned optional stage uses `llama.cpp`, neighbouring cues, Whisper confidence, and a user glossary. It must return reviewable structured suggestions, retain the original transcript and edit log, and never change timestamps. See [ADR 0007](docs/architecture/0007-contextual-subtitle-correction.md).
 
 ## Mixed languages, translation, and voice-over
@@ -121,6 +130,8 @@ These cases are deliberately not presented as finished one-click features yet:
 - The UI now has an experimental mixed-voice-over switch. It requires an explicit target language so an English opening cannot make automatic detection select the wrong language for the whole file, and it marks the result for review. It does not yet separate the quieter original from the voice-over: both are already mixed into the same samples. Reliable dual-language extraction requires a separately evaluated source-separation pipeline and visible uncertainty.
 
 See [ADR 0005](docs/architecture/0005-multilingual-dialogue-and-voice-over.md) for the proposed modes, filenames, and acceptance criteria.
+
+Translation development is in progress. The Components screen can install a checksummed official llama.cpp Windows build and one of three checksummed official Qwen3 GGUF profiles. On the development branch, a successful original SRT now exposes **Translate SRT…**: the dialog reuses the searchable language selector, always keeps the recognized original, and writes every requested target language as a separate collision-safe SRT. The recommended 4B profile passed a contextual sample from a real SRT after adaptive rechecking corrected a suspicious duplicated translation. The pipeline preserves cue IDs and timestamps, constrains generated IDs, and rejects missing/duplicate/invented IDs. It deliberately calls the result a draft: humour, cultural references, character voice, names, and ambiguous context still require human review. Translation remains experimental until broader English↔Russian runtime, player, review, and recovery tests pass. See [ADR 0008](docs/architecture/0008-local-subtitle-translation.md).
 
 ## Test
 
@@ -153,4 +164,4 @@ video → audio track → temporary PCM → Silero VAD → whisper.cpp full JSON
 
 Local Subtitle Studio source code is available under the [MIT License](LICENSE).
 
-The repository does not contain FFmpeg, whisper.cpp, or model binaries. The Components screen downloads them directly from the listed project sources at the user's request and retains license/build information delivered in the archives. The current Windows FFmpeg essentials build is GPLv3; whisper.cpp, OpenAI Whisper model weights, and Silero VAD are MIT-licensed. See [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`docs/architecture/0003-managed-components-and-models.md`](docs/architecture/0003-managed-components-and-models.md).
+The repository does not contain FFmpeg, whisper.cpp, llama.cpp, or model binaries. The Components screen downloads them directly from the listed project sources at the user's request and retains license/build information. The current Windows FFmpeg essentials build is GPLv3; whisper.cpp, llama.cpp, OpenAI Whisper model weights, and Silero VAD are MIT-licensed; Qwen3 GGUF translation weights use Apache-2.0. See [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`docs/architecture/0003-managed-components-and-models.md`](docs/architecture/0003-managed-components-and-models.md).

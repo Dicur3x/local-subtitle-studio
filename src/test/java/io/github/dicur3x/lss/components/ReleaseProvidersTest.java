@@ -60,6 +60,40 @@ class ReleaseProvidersTest {
         assertTrue(release.releaseNotes().contains("Fix VAD timestamps"));
     }
 
+    @Test
+    void llamaResolvesStableReleaseToItsChecksummedWindowsBuild() throws Exception {
+        String checksum = "c".repeat(64);
+        URI buildTag = URI.create(
+                "https://github.com/ggml-org/llama.cpp/releases/download/v0.3.0/nightly-tag.txt");
+        URI buildMetadata = URI.create(
+                "https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/b10621");
+        String stable = """
+                {"tag_name":"v0.3.0","draft":false,"prerelease":false,
+                 "html_url":"https://github.com/ggml-org/llama.cpp/releases/tag/v0.3.0",
+                 "body":"Stable fixes",
+                 "assets":[{"name":"nightly-tag.txt","browser_download_url":"%s"}]}
+                """.formatted(buildTag);
+        String build = """
+                {"tag_name":"b10621","assets":[
+                  {"name":"llama-b10621-bin-win-cpu-x64.zip",
+                   "browser_download_url":"https://github.com/ggml-org/llama.cpp/releases/download/b10621/llama-b10621-bin-win-cpu-x64.zip",
+                   "digest":"sha256:%s"}]}
+                """.formatted(checksum);
+        var client = new MetadataClient(Map.of(
+                LlamaReleaseProvider.LATEST_RELEASE_URI, stable,
+                buildTag, "b10621\n",
+                buildMetadata, build));
+
+        ComponentRelease release = new LlamaReleaseProvider(client, new ObjectMapper())
+                .latest(() -> false);
+
+        assertEquals(ManagedComponent.LLAMA_CPP, release.component());
+        assertEquals("b10621", release.version());
+        assertEquals(checksum, release.expectedSha256().orElseThrow());
+        assertTrue(release.releaseNotes().contains("v0.3.0"));
+        assertTrue(release.sourceCodeUri().toString().endsWith("v0.3.0.tar.gz"));
+    }
+
     private static final class MetadataClient implements DownloadClient {
         private final Map<URI, String> responses = new HashMap<>();
 

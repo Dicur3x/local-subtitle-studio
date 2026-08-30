@@ -36,21 +36,40 @@ public final class SrtWriter {
             throws SubtitleCreationException {
         Path media = Objects.requireNonNull(mediaFile, "mediaFile").toAbsolutePath().normalize();
         Path directory = outputDirectory(media);
-        List<SubtitleCue> safeCues = List.copyOf(Objects.requireNonNull(cues, "cues"));
-        if (safeCues.isEmpty()) {
-            throw new SubtitleCreationException("No speech was recognized, so an empty SRT file was not created.");
-        }
-
         String stem = fileStem(media.getFileName().toString());
         String languagePart = safeLanguage(language);
-        String contents = render(safeCues);
+        return writeNamed(directory, stem + "." + languagePart, cues);
+    }
+
+    public Path writeTranslated(
+            Path sourceSubtitle,
+            String sourceLanguage,
+            String targetLanguage,
+            List<SubtitleCue> cues
+    ) throws SubtitleCreationException {
+        Path source = requiredSubtitle(sourceSubtitle);
+        String stem = translationStem(source.getFileName().toString(), sourceLanguage);
+        return writeNamed(source.getParent(), stem + "." + safeLanguage(targetLanguage), cues);
+    }
+
+    private Path writeNamed(Path directory, String baseName, List<SubtitleCue> cues)
+            throws SubtitleCreationException {
+        List<SubtitleCue> safeCues = List.copyOf(Objects.requireNonNull(cues, "cues"));
+        if (safeCues.isEmpty()) {
+            throw new SubtitleCreationException("An empty SRT file was not created.");
+        }
+        return writeNamedContents(directory, baseName, render(safeCues));
+    }
+
+    private Path writeNamedContents(Path directory, String baseName, String contents)
+            throws SubtitleCreationException {
         Path temporary = null;
         try {
             temporary = Files.createTempFile(directory, ".lss-subtitles-", ".tmp");
             Files.writeString(temporary, contents, StandardCharsets.UTF_8);
             for (int copy = 1; copy < 10_000; copy++) {
                 String suffix = copy == 1 ? "" : "." + copy;
-                Path destination = directory.resolve(stem + "." + languagePart + suffix + ".srt");
+                Path destination = directory.resolve(baseName + suffix + ".srt");
                 try {
                     moveWithoutReplacing(temporary, destination);
                     return destination;
@@ -72,6 +91,23 @@ public final class SrtWriter {
                 }
             }
         }
+    }
+
+    private static Path requiredSubtitle(Path sourceSubtitle) throws SubtitleCreationException {
+        Path source = Objects.requireNonNull(sourceSubtitle, "sourceSubtitle")
+                .toAbsolutePath().normalize();
+        Path directory = source.getParent();
+        if (!Files.isRegularFile(source) || directory == null
+                || !Files.isDirectory(directory) || !Files.isWritable(directory)) {
+            throw new SubtitleCreationException("The original subtitle file or its folder is not writable.");
+        }
+        return source;
+    }
+
+    private static String translationStem(String fileName, String sourceLanguage) {
+        String stem = fileStem(fileName);
+        String language = java.util.regex.Pattern.quote(safeLanguage(sourceLanguage));
+        return stem.replaceFirst("(?i)\\." + language + "(?:\\.[0-9]+)?$", "");
     }
 
     public void replace(Path subtitleFile, List<SubtitleCue> cues) throws SubtitleCreationException {

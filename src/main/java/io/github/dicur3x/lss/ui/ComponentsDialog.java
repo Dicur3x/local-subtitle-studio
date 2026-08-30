@@ -7,6 +7,8 @@ import io.github.dicur3x.lss.components.ManagedComponent;
 import io.github.dicur3x.lss.components.ManagedToolsService;
 import io.github.dicur3x.lss.components.OperationProgress;
 import io.github.dicur3x.lss.models.InstalledModelBundle;
+import io.github.dicur3x.lss.models.InstalledTranslationModel;
+import io.github.dicur3x.lss.models.TranslationModelProfile;
 import io.github.dicur3x.lss.models.WhisperModelProfile;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -58,6 +60,10 @@ public final class ComponentsDialog {
     private final Label modelDescription = new Label();
     private final Label modelStatus = new Label();
     private final Button installModel = new Button(tr("components.installModel"));
+    private final ComboBox<TranslationModelProfile> translationModelProfiles = new ComboBox<>();
+    private final Label translationModelDescription = new Label();
+    private final Label translationModelStatus = new Label();
+    private final Button installTranslationModel = new Button(tr("components.installTranslationModel"));
     private boolean recommendedSetupComplete;
     private boolean versionsChecked;
 
@@ -121,7 +127,9 @@ public final class ComponentsDialog {
         VBox downloadState = new VBox(8, componentActions, progressRow, operationStatus);
 
         VBox modelCard = createModelCard();
-        VBox content = new VBox(18, explanation, storage, components, downloadState, modelCard);
+        VBox translationModelCard = createTranslationModelCard();
+        VBox content = new VBox(18, explanation, storage, components, downloadState,
+                modelCard, translationModelCard);
         content.setPadding(new Insets(8));
 
         ScrollPane scrollPane = new ScrollPane(content);
@@ -146,8 +154,11 @@ public final class ComponentsDialog {
         Label status = new Label(tr("components.checkingLocal"));
         status.setWrapText(true);
         status.getStyleClass().add("muted");
-        Label license = new Label(component == ManagedComponent.FFMPEG
-                ? tr("components.ffmpegLicense") : tr("components.whisperLicense"));
+        Label license = new Label(switch (component) {
+            case FFMPEG -> tr("components.ffmpegLicense");
+            case WHISPER_CPP -> tr("components.whisperLicense");
+            case LLAMA_CPP -> tr("components.llamaLicense");
+        });
         license.setWrapText(true);
         license.getStyleClass().add("component-license");
 
@@ -213,6 +224,58 @@ public final class ComponentsDialog {
         return card;
     }
 
+    private VBox createTranslationModelCard() {
+        Label title = new Label(tr("components.translationModelTitle"));
+        title.getStyleClass().add("component-title");
+        Label source = new Label(tr("components.translationModelSourceText"));
+        source.setWrapText(true);
+        source.getStyleClass().add("component-license");
+        Label modelUpdates = new Label(tr("components.translationModelUpdates"));
+        modelUpdates.setWrapText(true);
+        modelUpdates.getStyleClass().add("component-license");
+
+        translationModelProfiles.setItems(FXCollections.observableArrayList(
+                TranslationModelProfile.values()));
+        translationModelProfiles.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(TranslationModelProfile profile) {
+                return profile == null ? "" : translationModelProfileName(profile);
+            }
+
+            @Override
+            public TranslationModelProfile fromString(String value) {
+                return translationModelProfiles.getValue();
+            }
+        });
+        translationModelProfiles.getSelectionModel().select(TranslationModelProfile.MAXIMUM_QUALITY);
+        translationModelProfiles.setMaxWidth(Double.MAX_VALUE);
+        translationModelProfiles.valueProperty().addListener(
+                (observable, oldProfile, newProfile) -> updateTranslationModelChoice());
+        translationModelDescription.setWrapText(true);
+        translationModelDescription.getStyleClass().add("muted");
+        translationModelStatus.setWrapText(true);
+        translationModelStatus.getStyleClass().add("muted");
+
+        installTranslationModel.getStyleClass().add("primary-button");
+        installTranslationModel.setOnAction(event -> installSelectedTranslationModel());
+        Button modelSource = new Button(tr("components.modelSource"));
+        modelSource.getStyleClass().add("quiet-button");
+        modelSource.setOnAction(event -> {
+            TranslationModelProfile profile = translationModelProfiles.getValue();
+            if (profile != null) {
+                openLink.accept(profile.sourceUri().toString());
+            }
+        });
+        HBox actions = new HBox(10, installTranslationModel, modelSource);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox card = new VBox(9, title, translationModelProfiles, translationModelDescription,
+                translationModelStatus, source, modelUpdates, actions);
+        card.getStyleClass().add("component-card");
+        updateTranslationModelChoice();
+        return card;
+    }
+
     private void loadLocalState() {
         boolean programsInstalled = true;
         for (ManagedComponent component : ManagedComponent.values()) {
@@ -241,9 +304,23 @@ public final class ComponentsDialog {
         } catch (Exception exception) {
             modelStatus.setText(exception.getMessage());
         }
+        try {
+            Optional<InstalledTranslationModel> current = toolsService.currentTranslationModel();
+            if (current.isPresent()) {
+                TranslationModelProfile profile = current.orElseThrow().profile();
+                translationModelProfiles.getSelectionModel().select(profile);
+                translationModelStatus.setText(tr("components.translationModelInstalled",
+                        translationModelProfileName(profile)));
+            } else {
+                translationModelStatus.setText(tr("components.noTranslationModel"));
+            }
+        } catch (Exception exception) {
+            translationModelStatus.setText(exception.getMessage());
+        }
         recommendedSetupComplete = programsInstalled && modelInstalled;
         versionsChecked = false;
         updateModelChoice();
+        updateTranslationModelChoice();
         updateActionAvailability(false);
     }
 
@@ -423,6 +500,24 @@ public final class ComponentsDialog {
         );
     }
 
+    private void installSelectedTranslationModel() {
+        TranslationModelProfile profile = translationModelProfiles.getValue();
+        if (profile == null) {
+            return;
+        }
+        runTask(
+                tr("components.preparing", translationModelProfileName(profile)),
+                () -> toolsService.installTranslationModel(
+                        profile, progressListener(), Thread.currentThread()::isInterrupted),
+                installed -> {
+                    translationModelStatus.setText(tr("components.translationModelInstalledApplied",
+                            translationModelProfileName(profile)));
+                    installTranslationModel.setDisable(true);
+                    operationStatus.setText(tr("components.translationReady"));
+                }
+        );
+    }
+
     private void updateModelChoice() {
         WhisperModelProfile profile = modelProfiles.getValue();
         if (profile == null) {
@@ -452,6 +547,39 @@ public final class ComponentsDialog {
         }
     }
 
+    private void updateTranslationModelChoice() {
+        TranslationModelProfile profile = translationModelProfiles.getValue();
+        if (profile == null) {
+            return;
+        }
+        translationModelDescription.setText(translationModelProfileDescription(profile) + " "
+                + tr("components.downloadSize", formatSize(profile.sizeBytes())));
+        try {
+            boolean active = toolsService.currentTranslationModel()
+                    .filter(model -> model.profileId().equals(profile.id())
+                            && model.modelSha256().equalsIgnoreCase(profile.sha256()))
+                    .isPresent();
+            boolean installed = toolsService.isTranslationModelInstalled(profile);
+            installTranslationModel.setDisable(active || activeThread.get() != null);
+            installTranslationModel.setText(active ? tr("components.modelActive")
+                    : installed ? tr("components.useModel")
+                    : tr("components.installTranslationModel"));
+            if (active) {
+                translationModelStatus.setText(tr("components.translationModelInstalled",
+                        translationModelProfileName(profile)));
+            } else if (installed) {
+                translationModelStatus.setText(tr("components.translationModelInstalledNotActive",
+                        translationModelProfileName(profile)));
+            } else {
+                translationModelStatus.setText(tr("components.translationModelNotInstalled",
+                        translationModelProfileName(profile)));
+            }
+        } catch (Exception exception) {
+            installTranslationModel.setDisable(false);
+            installTranslationModel.setText(tr("components.installTranslationModel"));
+        }
+    }
+
     private OperationProgress progressListener() {
         return (phase, completed, total) -> Platform.runLater(() -> {
             if (closed.get()) {
@@ -474,6 +602,9 @@ public final class ComponentsDialog {
         }
         if (phase.equals("Model and voice detection are ready")) {
             return tr("components.phaseModelReady");
+        }
+        if (phase.equals("Translation model is ready")) {
+            return tr("components.phaseTranslationModelReady");
         }
         if (phase.endsWith(" (already verified)")) {
             return tr("components.phaseAlreadyVerified", localizedProgressPhase(
@@ -499,6 +630,14 @@ public final class ComponentsDialog {
             if (profile.displayName().equals(target)) {
                 return profileName(profile);
             }
+        }
+        for (TranslationModelProfile profile : TranslationModelProfile.values()) {
+            if (profile.displayName().equals(target)) {
+                return translationModelProfileName(profile);
+            }
+        }
+        if (target.equals("Qwen3 license")) {
+            return tr("components.qwenLicense");
         }
         return target;
     }
@@ -559,10 +698,13 @@ public final class ComponentsDialog {
             row.notes().setDisable(busy || !latestReleases.containsKey(component));
         });
         modelProfiles.setDisable(busy);
+        translationModelProfiles.setDisable(busy);
         if (busy) {
             installModel.setDisable(true);
+            installTranslationModel.setDisable(true);
         } else {
             updateModelChoice();
+            updateTranslationModelChoice();
         }
         cancel.setVisible(busy);
         cancel.setManaged(busy);
@@ -616,6 +758,14 @@ public final class ComponentsDialog {
 
     private static String profileDescription(WhisperModelProfile profile) {
         return tr("model." + profile.id() + ".description");
+    }
+
+    private static String translationModelProfileName(TranslationModelProfile profile) {
+        return tr("translationModel." + profile.id() + ".name");
+    }
+
+    private static String translationModelProfileDescription(TranslationModelProfile profile) {
+        return tr("translationModel." + profile.id() + ".description");
     }
 
     private record ComponentRow(

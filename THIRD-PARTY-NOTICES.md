@@ -21,6 +21,14 @@ The application invokes `ffmpeg.exe` and `ffprobe.exe` as separate processes. It
 
 The component manager selects a non-draft, non-prerelease semantic release and the official Windows x64 asset. A SHA-256 digest published in GitHub release metadata is verified when available; the downloaded archive hash is always recorded. A copy of the MIT license is placed in the managed installation.
 
+## llama.cpp
+
+- Upstream source and releases: <https://github.com/ggml-org/llama.cpp>
+- License: MIT
+- Copyright: 2023–2026 the ggml authors
+
+The component manager resolves the official stable release to the Windows x64 CPU build identified by that release, then requires the SHA-256 digest published in GitHub release metadata before activation. The archive is downloaded only after the user chooses installation. A copy of the MIT license and the installed archive metadata remain beside the executable.
+
 ## OpenAI Whisper model weights converted for whisper.cpp
 
 - Model repository: <https://huggingface.co/ggerganov/whisper.cpp>
@@ -38,3 +46,12 @@ Each supported model file has a fixed expected byte size and SHA-256 checksum in
 - Copyright: 2020–present Silero Team
 
 The fixed `ggml-silero-v6.2.0.bin` artifact is verified by exact byte size and SHA-256 checksum before activation. A copy of the license is stored beside managed models.
+
+## Qwen3 GGUF translation model weights
+
+- Official model publisher and repositories: <https://huggingface.co/Qwen>
+- Curated repositories: <https://huggingface.co/Qwen/Qwen3-0.6B-GGUF>, <https://huggingface.co/Qwen/Qwen3-1.7B-GGUF>, and <https://huggingface.co/Qwen/Qwen3-4B-GGUF>
+- License: Apache License 2.0
+- Copyright: 2025 Alibaba Cloud
+
+The application does not redistribute these weights. The Components screen downloads a selected GGUF directly from the official Qwen repository after an explicit user action. The catalog pins the exact repository, filename, byte size, and SHA-256; all four values are checked before activation. The official license is downloaded, checked, and stored beside the managed translation models.

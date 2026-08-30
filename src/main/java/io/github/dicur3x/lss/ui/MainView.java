@@ -16,6 +16,8 @@ import io.github.dicur3x.lss.subtitles.SpokenLanguage;
 import io.github.dicur3x.lss.subtitles.SubtitleCreationService;
 import io.github.dicur3x.lss.subtitles.SubtitleReadiness;
 import io.github.dicur3x.lss.subtitles.SubtitleWarning;
+import io.github.dicur3x.lss.translation.CreatedTranslations;
+import io.github.dicur3x.lss.translation.SubtitleTranslationWorkflow;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
@@ -43,7 +45,6 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Window;
-import javafx.util.StringConverter;
 
 import java.io.File;
 import java.io.IOException;
@@ -76,6 +77,7 @@ public final class MainView implements AutoCloseable {
     private final MediaProbe mediaProbe;
     private final AudioExtractor audioExtractor;
     private final SubtitleCreationService subtitleCreationService;
+    private final SubtitleTranslationWorkflow translationWorkflow;
     private final RecoveryStore recoveryStore;
     private final Consumer<Window> componentsAction;
     private final Consumer<Window> settingsAction;
@@ -97,12 +99,15 @@ public final class MainView implements AutoCloseable {
     private final Button prepareAudioButton = new Button(tr("main.prepareAudio"));
     private final Button setupComponentsButton = new Button(tr("main.openComponents"));
     private final Button reviewButton = new Button(tr("main.reviewWarnings"));
+    private final Button translateButton = new Button(tr("main.translateSrt"));
     private final ComboBox<AudioTrack> audioTracks = new ComboBox<>();
-    private final ComboBox<SpokenLanguage> spokenLanguages = new ComboBox<>();
     private final CheckBox voiceOverMode = new CheckBox(tr("main.voiceOverMode"));
-    private final SpokenLanguage languageSeparator = new SpokenLanguage("separator", tr("main.otherLanguages"));
     private final List<SpokenLanguage> languageChoices = SpokenLanguage.choices(I18n.locale());
     private SpokenLanguage selectedSpokenLanguage = languageChoices.getFirst();
+    private final SearchableLanguagePicker spokenLanguagePicker = new SearchableLanguagePicker(
+            languageChoices, selectedSpokenLanguage, tr("main.otherLanguages"),
+            tr("main.languageSearch"), 3);
+    private final ComboBox<SpokenLanguage> spokenLanguages = spokenLanguagePicker.control();
     private final VBox mediaDetails = new VBox(14);
     private final Label audioState = new Label();
     private final Label readinessState = new Label();
@@ -111,13 +116,14 @@ public final class MainView implements AutoCloseable {
     private MediaInfo currentMedia;
     private PreparedAudio preparedAudio;
     private CreatedSubtitles lastCreatedSubtitles;
-    private boolean updatingLanguageChoices;
+    private boolean translationInProgress;
     private RecoveryJob pendingRecovery;
 
     public MainView(
             MediaProbe mediaProbe,
             AudioExtractor audioExtractor,
             SubtitleCreationService subtitleCreationService,
+            SubtitleTranslationWorkflow translationWorkflow,
             RecoveryStore recoveryStore,
             Consumer<Window> componentsAction,
             Consumer<Window> settingsAction
@@ -126,6 +132,7 @@ public final class MainView implements AutoCloseable {
         this.audioExtractor = Objects.requireNonNull(audioExtractor, "audioExtractor");
         this.subtitleCreationService = Objects.requireNonNull(
                 subtitleCreationService, "subtitleCreationService");
+        this.translationWorkflow = Objects.requireNonNull(translationWorkflow, "translationWorkflow");
         this.recoveryStore = Objects.requireNonNull(recoveryStore, "recoveryStore");
         this.componentsAction = Objects.requireNonNull(componentsAction, "componentsAction");
         this.settingsAction = Objects.requireNonNull(settingsAction, "settingsAction");
@@ -306,10 +313,17 @@ public final class MainView implements AutoCloseable {
                 reviewButton.setManaged(!reviewed.issues().isEmpty());
             }
         });
+        translateButton.getStyleClass().add("primary-button");
+        translateButton.setVisible(false);
+        translateButton.setManaged(false);
+        translateButton.setTooltip(new Tooltip(tr("main.translateSrtTooltip")));
+        translateButton.setOnAction(event -> translateCreatedSubtitles());
 
         HBox row = new HBox(10, status, spacer(), progressPercent, cancelButton);
         row.setAlignment(Pos.CENTER_LEFT);
-        VBox wrapper = new VBox(8, row, progress, progressStages, error, reviewButton);
+        HBox resultActions = new HBox(10, reviewButton, translateButton);
+        resultActions.setAlignment(Pos.CENTER_LEFT);
+        VBox wrapper = new VBox(8, row, progress, progressStages, error, resultActions);
         HBox.setHgrow(wrapper, Priority.ALWAYS);
         wrapper.setMaxWidth(Double.MAX_VALUE);
         return new HBox(wrapper);
@@ -326,105 +340,7 @@ public final class MainView implements AutoCloseable {
     }
 
     private void configureLanguagePicker() {
-        spokenLanguages.setItems(FXCollections.observableArrayList(languageChoicesWithSeparator()));
-        spokenLanguages.setCellFactory(listView -> createLanguageCell());
-        spokenLanguages.setConverter(new StringConverter<>() {
-            @Override
-            public String toString(SpokenLanguage language) {
-                return language == null || languageSeparator.equals(language) ? "" : language.toString();
-            }
-
-            @Override
-            public SpokenLanguage fromString(String value) {
-                return matchingLanguages(languageChoices, value, I18n.locale()).stream()
-                        .findFirst()
-                        .orElse(selectedSpokenLanguage);
-            }
-        });
-        spokenLanguages.setEditable(true);
-        spokenLanguages.setVisibleRowCount(14);
-        spokenLanguages.setValue(selectedSpokenLanguage);
-        spokenLanguages.setMaxWidth(Double.MAX_VALUE);
-        spokenLanguages.getEditor().setPromptText(tr("main.languageSearch"));
-        spokenLanguages.getEditor().textProperty().addListener((observable, oldText, newText) -> {
-            if (!updatingLanguageChoices) {
-                filterLanguages(newText);
-            }
-        });
-        spokenLanguages.getEditor().focusedProperty().addListener((observable, wasFocused, focused) -> {
-            if (focused) {
-                Platform.runLater(spokenLanguages.getEditor()::selectAll);
-            } else if (!updatingLanguageChoices) {
-                restoreLanguageSelection();
-            }
-        });
-        spokenLanguages.setOnShowing(event -> {
-            if (!updatingLanguageChoices
-                    && spokenLanguages.getEditor().getText().equals(selectedSpokenLanguage.toString())) {
-                restoreLanguageSelection();
-            }
-        });
-        spokenLanguages.setOnAction(event -> {
-            if (updatingLanguageChoices) {
-                return;
-            }
-            SpokenLanguage chosen = spokenLanguages.getValue();
-            if (chosen != null && !languageSeparator.equals(chosen)) {
-                selectedSpokenLanguage = chosen;
-            }
-            restoreLanguageSelection();
-        });
-    }
-
-    private ListCell<SpokenLanguage> createLanguageCell() {
-        return new ListCell<>() {
-            @Override
-            protected void updateItem(SpokenLanguage item, boolean empty) {
-                super.updateItem(item, empty);
-                boolean separator = !empty && languageSeparator.equals(item);
-                getStyleClass().remove("language-separator");
-                if (separator) {
-                    getStyleClass().add("language-separator");
-                }
-                setDisable(separator);
-                setMouseTransparent(separator);
-                setText(empty || item == null ? null
-                        : separator ? "────────  " + item.displayName() : item.toString());
-            }
-        };
-    }
-
-    private List<SpokenLanguage> languageChoicesWithSeparator() {
-        List<SpokenLanguage> displayed = new ArrayList<>(languageChoices.size() + 1);
-        int promotedCount = Math.min(3, languageChoices.size());
-        displayed.addAll(languageChoices.subList(0, promotedCount));
-        if (languageChoices.size() > promotedCount) {
-            displayed.add(languageSeparator);
-            displayed.addAll(languageChoices.subList(promotedCount, languageChoices.size()));
-        }
-        return displayed;
-    }
-
-    private void filterLanguages(String query) {
-        SpokenLanguage currentValue = spokenLanguages.getValue();
-        if (query != null && (query.equals(selectedSpokenLanguage.toString())
-                || currentValue != null && !languageSeparator.equals(currentValue)
-                && query.equals(currentValue.toString()))) {
-            return;
-        }
-        String normalized = query == null ? "" : query.strip().toLowerCase(I18n.locale());
-        List<SpokenLanguage> filtered = normalized.isEmpty()
-                ? languageChoicesWithSeparator()
-                : matchingLanguages(languageChoices, normalized, I18n.locale());
-        updatingLanguageChoices = true;
-        spokenLanguages.getItems().setAll(filtered);
-        spokenLanguages.setValue(null);
-        spokenLanguages.getEditor().setText(query == null ? "" : query);
-        spokenLanguages.getEditor().positionCaret(spokenLanguages.getEditor().getText().length());
-        updatingLanguageChoices = false;
-        if (spokenLanguages.getEditor().isFocused()) {
-            showLanguageResults();
-        }
+        spokenLanguagePicker.setOnSelection(language -> selectedSpokenLanguage = language);
     }
 
     static List<SpokenLanguage> matchingLanguages(
@@ -432,30 +348,7 @@ public final class MainView implements AutoCloseable {
             String query,
             Locale locale
     ) {
-        String normalized = query == null ? "" : query.strip().toLowerCase(locale);
-        if (normalized.isEmpty()) {
-            return List.copyOf(choices);
-        }
-        return choices.stream()
-                .filter(language -> language.toString().toLowerCase(locale).contains(normalized)
-                        || language.code().contains(normalized))
-                .toList();
-    }
-
-    private void showLanguageResults() {
-        Platform.runLater(() -> {
-            spokenLanguages.show();
-            spokenLanguages.getEditor().requestFocus();
-            spokenLanguages.getEditor().positionCaret(spokenLanguages.getEditor().getText().length());
-        });
-    }
-
-    private void restoreLanguageSelection() {
-        updatingLanguageChoices = true;
-        spokenLanguages.getItems().setAll(languageChoicesWithSeparator());
-        spokenLanguages.setValue(selectedSpokenLanguage);
-        spokenLanguages.getEditor().setText(selectedSpokenLanguage.toString());
-        updatingLanguageChoices = false;
+        return SearchableLanguagePicker.matchingLanguages(choices, query, locale);
     }
 
     private static Region spacer() {
@@ -648,7 +541,7 @@ public final class MainView implements AutoCloseable {
             languageChoices.stream().filter(language -> language.code().equals(recovery.spokenLanguage()))
                     .findFirst().ifPresent(language -> {
                         selectedSpokenLanguage = language;
-                        restoreLanguageSelection();
+                        spokenLanguagePicker.setSelected(language);
                     });
             voiceOverMode.setSelected(recovery.audioMode() == DialogueAudioMode.MIXED_VOICE_OVER);
             createSubtitlesButton.setText(tr("main.continueSrt"));
@@ -810,7 +703,89 @@ public final class MainView implements AutoCloseable {
         lastCreatedSubtitles = result;
         reviewButton.setVisible(!result.issues().isEmpty());
         reviewButton.setManaged(!result.issues().isEmpty());
+        translateButton.setVisible(true);
+        translateButton.setManaged(true);
         activeTask = null;
+    }
+
+    private void translateCreatedSubtitles() {
+        CreatedSubtitles source = lastCreatedSubtitles;
+        if (source == null) {
+            return;
+        }
+        SubtitleReadiness readiness = translationWorkflow.readiness();
+        if (!readiness.ready()) {
+            ButtonType open = new ButtonType(tr("main.openComponents"), ButtonBar.ButtonData.OK_DONE);
+            ButtonType cancel = new ButtonType(tr("common.cancel"), ButtonBar.ButtonData.CANCEL_CLOSE);
+            Alert alert = recoveryAlert(translateButton.getScene().getWindow(),
+                    tr("translation.setupRequired"), tr("translation.openComponentsFirst"), open, cancel);
+            if (alert.showAndWait().orElse(cancel) == open) {
+                componentsAction.accept(translateButton.getScene().getWindow());
+            }
+            if (!translationWorkflow.readiness().ready()) {
+                return;
+            }
+        }
+        new TranslationSetupDialog().showAndWait(
+                translateButton.getScene().getWindow(), source.language())
+                .ifPresent(result -> startTranslation(source, result));
+    }
+
+    private void startTranslation(CreatedSubtitles source, TranslationSetupDialog.Result request) {
+        long operationId = beginPostProcessing();
+        translationInProgress = true;
+        error.setText("");
+        updateTranslationProgress(0);
+        cancelButton.setVisible(true);
+        cancelButton.setManaged(true);
+        status.setText(tr("translation.starting"));
+        setControlsBusy(true);
+        activeTask = worker.submit(() -> {
+            try {
+                CreatedTranslations result = translationWorkflow.translate(
+                        source, request.targetLanguage(),
+                        Thread.currentThread()::isInterrupted,
+                        percent -> runOnUiIfCurrent(operationId,
+                                () -> updateTranslationProgress(percent)));
+                runOnUiIfCurrent(operationId, () -> showCreatedTranslations(result));
+            } catch (CancellationException ignored) {
+                runOnUiIfCurrent(operationId,
+                        () -> restoreTranslationReadyState(tr("translation.cancelled")));
+            } catch (Exception exception) {
+                LOGGER.log(Level.SEVERE, "Subtitle translation failed", exception);
+                runOnUiIfCurrent(operationId,
+                        () -> showTranslationError(exception.getMessage()));
+            }
+        });
+    }
+
+    private void showCreatedTranslations(CreatedTranslations result) {
+        translationInProgress = false;
+        updateTranslationProgress(100);
+        cancelButton.setVisible(false);
+        cancelButton.setManaged(false);
+        setControlsBusy(false);
+        status.setText(tr("translation.ready"));
+        error.getStyleClass().removeAll("error-text", "warning-text", "validation-success");
+        error.getStyleClass().add("validation-success");
+        error.setText(tr("translation.saved", result.translatedFile()));
+        activeTask = null;
+    }
+
+    private void updateTranslationProgress(int percent) {
+        int bounded = Math.max(0, Math.min(100, percent));
+        progress.setProgress(bounded / 100d);
+        progress.setVisible(true);
+        progress.setManaged(true);
+        progressPercent.setText(bounded + "%");
+        progressPercent.setVisible(true);
+        progressPercent.setManaged(true);
+        progressStages.setText(bounded == 100
+                ? "✓ " + tr("translation.progressComplete")
+                : "● " + tr("translation.progress", bounded));
+        progressStages.setVisible(true);
+        progressStages.setManaged(true);
+        status.setText(bounded == 100 ? tr("translation.ready") : tr("translation.translating"));
     }
 
     private void showPreparedAudio(PreparedAudio result) {
@@ -839,6 +814,21 @@ public final class MainView implements AutoCloseable {
         audioState.setText(tr("main.audioDecodeHint"));
         status.setText(message);
         activeTask = null;
+    }
+
+    private void restoreTranslationReadyState(String message) {
+        translationInProgress = false;
+        hideProgress();
+        cancelButton.setVisible(false);
+        cancelButton.setManaged(false);
+        setControlsBusy(false);
+        status.setText(message);
+        activeTask = null;
+    }
+
+    private void showTranslationError(String message) {
+        translationInProgress = false;
+        showOperationError(tr("translation.failed"), message);
     }
 
     private void markRecoveryAvailable() {
@@ -910,15 +900,30 @@ public final class MainView implements AutoCloseable {
     private long beginOperation() {
         long operationId = operationGeneration.incrementAndGet();
         cancelTask();
+        translationInProgress = false;
         lastCreatedSubtitles = null;
         reviewButton.setVisible(false);
         reviewButton.setManaged(false);
+        translateButton.setVisible(false);
+        translateButton.setManaged(false);
+        return operationId;
+    }
+
+    private long beginPostProcessing() {
+        long operationId = operationGeneration.incrementAndGet();
+        cancelTask();
         return operationId;
     }
 
     private void cancelFromUi() {
         operationGeneration.incrementAndGet();
+        boolean cancelledTranslation = translationInProgress;
+        translationInProgress = false;
         cancelTask();
+        if (cancelledTranslation) {
+            restoreTranslationReadyState(tr("translation.cancelled"));
+            return;
+        }
         if (currentMedia == null) {
             showIdleState();
         } else {
@@ -983,7 +988,7 @@ public final class MainView implements AutoCloseable {
 
     private void showNotice(String message, boolean warning) {
         error.setText(message);
-        error.getStyleClass().removeAll("error-text", "warning-text");
+        error.getStyleClass().removeAll("error-text", "warning-text", "validation-success");
         error.getStyleClass().add(warning ? "warning-text" : "error-text");
     }
 
@@ -1019,6 +1024,7 @@ public final class MainView implements AutoCloseable {
         createSubtitlesButton.setDisable(busy);
         prepareAudioButton.setDisable(busy);
         reviewButton.setDisable(busy);
+        translateButton.setDisable(busy);
         setupComponentsButton.setDisable(busy);
     }
 

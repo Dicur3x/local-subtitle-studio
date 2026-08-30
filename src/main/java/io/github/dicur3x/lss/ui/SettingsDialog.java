@@ -73,6 +73,9 @@ public final class SettingsDialog {
         TextField whisper = field(current.whisperExecutable(), tr("settings.whisperPrompt"));
         TextField model = field(current.whisperModel(), tr("settings.modelPrompt"));
         TextField vadModel = field(current.whisperVadModel(), tr("settings.vadPrompt"));
+        TextField llama = field(current.llamaExecutable(), tr("settings.llamaPrompt"));
+        TextField translationModel = field(
+                current.translationModel(), tr("settings.translationModelPrompt"));
         boolean usesSystemTemporaryDirectory = current.temporaryDirectory() == null
                 || current.temporaryDirectory().isBlank();
         TextField temporaryDirectory = field(
@@ -156,6 +159,11 @@ public final class SettingsDialog {
         addFileRow(manualGrid, 4, tr("settings.vadModel"), vadModel, dialog,
                 tr("settings.chooseVad"), tr("settings.vadModel"), "*.bin");
         manualGrid.add(mutedLabel(tr("settings.vadExplanation")), 1, 5);
+        addExecutableRow(manualGrid, 6, "llama.cpp CLI", llama, dialog,
+                tr("settings.chooseLlama"));
+        addFileRow(manualGrid, 7, tr("settings.translationModel"), translationModel, dialog,
+                tr("settings.chooseTranslationModel"), tr("settings.translationModel"), "*.gguf");
+        manualGrid.add(mutedLabel(tr("settings.translationModelExplanation")), 1, 8);
 
         GridPane outputGrid = new GridPane();
         outputGrid.setHgap(12);
@@ -211,6 +219,7 @@ public final class SettingsDialog {
             validate.setDisable(true);
             validationResult.setText(tr("settings.checkingTools"));
             ApplicationSettings candidate = values(ffmpeg, ffprobe, whisper, model, vadModel,
+                    llama, translationModel,
                     temporaryDirectory, useSystemTemporaryDirectory, managedStorageDirectory,
                     subtitlePreferences(charactersPerLine, maximumLines,
                             minimumDuration, maximumDuration, startPadding, endPadding, speechGap, maximumCps));
@@ -259,7 +268,8 @@ public final class SettingsDialog {
         dialog.getDialogPane().setContent(scrollPane);
 
         dialog.setResultConverter(button -> button == save
-                ? values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
+                ? values(ffmpeg, ffprobe, whisper, model, vadModel, llama, translationModel,
+                        temporaryDirectory,
                         useSystemTemporaryDirectory, managedStorageDirectory,
                         subtitlePreferences(charactersPerLine, maximumLines, minimumDuration,
                                 maximumDuration, startPadding, endPadding, speechGap, maximumCps),
@@ -431,12 +441,15 @@ public final class SettingsDialog {
             TextField whisper,
             TextField model,
             TextField vadModel,
+            TextField llama,
+            TextField translationModel,
             TextField temporaryDirectory,
             CheckBox useSystemTemporaryDirectory,
             TextField managedStorageDirectory,
             SubtitlePreferences subtitlePreferences
     ) {
-        return values(ffmpeg, ffprobe, whisper, model, vadModel, temporaryDirectory,
+        return values(ffmpeg, ffprobe, whisper, model, vadModel, llama, translationModel,
+                temporaryDirectory,
                 useSystemTemporaryDirectory,
                 managedStorageDirectory,
                 subtitlePreferences, OutputPreferences.defaults(), UiLanguage.ENGLISH);
@@ -448,6 +461,8 @@ public final class SettingsDialog {
             TextField whisper,
             TextField model,
             TextField vadModel,
+            TextField llama,
+            TextField translationModel,
             TextField temporaryDirectory,
             CheckBox useSystemTemporaryDirectory,
             TextField managedStorageDirectory,
@@ -462,6 +477,8 @@ public final class SettingsDialog {
                 whisper.getText(),
                 model.getText(),
                 vadModel.getText(),
+                llama.getText(),
+                translationModel.getText(),
                 useSystemTemporaryDirectory.isSelected() ? "" : temporaryDirectory.getText(),
                 managedStorageDirectory.getText(),
                 subtitlePreferences,
@@ -526,6 +543,7 @@ public final class SettingsDialog {
         return switch (name) {
             case "Whisper model" -> tr("tool.whisperModel");
             case "VAD model" -> tr("tool.vadModel");
+            case "Translation model" -> tr("tool.translationModel");
             case "Temporary directory" -> tr("tool.temporaryDirectory");
             default -> name;
         };
@@ -539,6 +557,7 @@ public final class SettingsDialog {
             case "Path is not configured" -> tr("tool.pathNotConfigured");
             case "Not needed until transcription is enabled" -> tr("tool.notNeededYet");
             case "Installed automatically with a managed model" -> tr("tool.installedWithModel");
+            case "Not needed until subtitle translation is enabled" -> tr("tool.notNeededTranslation");
             case "File cannot be read" -> tr("tool.fileUnreadable");
             case "Path is invalid" -> tr("tool.pathInvalid");
             case "System temporary directory" -> tr("tool.systemTemporaryDirectory");

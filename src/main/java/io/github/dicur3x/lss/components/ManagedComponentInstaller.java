@@ -56,6 +56,9 @@ public final class ManagedComponentInstaller {
             if (release.component() == ManagedComponent.WHISPER_CPP) {
                 copyLicense("/third-party/whisper.cpp-LICENSE.txt",
                         extracted.resolve("LICENSE-whisper.cpp.txt"));
+            } else if (release.component() == ManagedComponent.LLAMA_CPP) {
+                copyLicense("/third-party/llama.cpp-LICENSE.txt",
+                        extracted.resolve("LICENSE-llama.cpp.txt"));
             }
 
             String directoryName = safeDirectoryName(release.version()) + "-" + download.sha256().substring(0, 12);
@@ -69,8 +72,7 @@ public final class ManagedComponentInstaller {
                 moveDirectory(extracted, installationDirectory);
             }
 
-            Path primary = locateByName(installationDirectory,
-                    release.component() == ManagedComponent.FFMPEG ? "ffmpeg.exe" : "whisper-cli.exe");
+            Path primary = locateByName(installationDirectory, primaryExecutableName(release.component()));
             String secondary = release.component() == ManagedComponent.FFMPEG
                     ? locateByName(installationDirectory, "ffprobe.exe").toString() : "";
 
@@ -118,8 +120,11 @@ public final class ManagedComponentInstaller {
     }
 
     private static List<Path> findExecutables(Path root, ManagedComponent component) throws IOException {
-        List<String> requiredNames = component == ManagedComponent.FFMPEG
-                ? List.of("ffmpeg.exe", "ffprobe.exe") : List.of("whisper-cli.exe");
+        List<String> requiredNames = switch (component) {
+            case FFMPEG -> List.of("ffmpeg.exe", "ffprobe.exe");
+            case WHISPER_CPP -> List.of("whisper-cli.exe");
+            case LLAMA_CPP -> List.of("llama-cli.exe");
+        };
         List<Path> found;
         try (var files = Files.find(root, 8, (path, attributes) -> attributes.isRegularFile()
                 && requiredNames.stream().anyMatch(name -> name.equalsIgnoreCase(path.getFileName().toString())))) {
@@ -131,6 +136,14 @@ public final class ManagedComponentInstaller {
             }
         }
         return found;
+    }
+
+    private static String primaryExecutableName(ManagedComponent component) {
+        return switch (component) {
+            case FFMPEG -> "ffmpeg.exe";
+            case WHISPER_CPP -> "whisper-cli.exe";
+            case LLAMA_CPP -> "llama-cli.exe";
+        };
     }
 
     private static boolean containsExecutables(Path root, ManagedComponent component) {
