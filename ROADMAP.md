@@ -20,7 +20,7 @@ This file keeps product requirements visible outside the chat history. “Planne
 - [x] Replaceable `TranslationEngine` boundary.
 - [x] Context batches with stable cue IDs and strict missing/duplicate/invented-ID rejection.
 - [x] Local llama.cpp structured-output adapter.
-- [ ] Managed llama.cpp installation and a verified, licensed translation model with checksums and disk-size display.
+- [x] Managed llama.cpp installation and curated, licensed Qwen3 GGUF profiles with exact checksums and disk-size display.
 - [ ] Main-screen source/target language controls without duplicating the existing language search UI.
 - [ ] Explicit output choices: original, translated, both separate files, and optional bilingual SRT.
 - [ ] English→Russian and Russian→English real-media quality/runtime tests.
@@ -53,7 +53,7 @@ Batch processing starts only after the single-file translation path is verified 
 ### Performance and resilience
 
 - [ ] Detect CPU/GPU capabilities and offer compatible acceleration without requiring NVIDIA.
-- [ ] Resumable intermediate project state so a late interruption does not restart a feature film from zero.
+- [x] Resumable prepared audio and per-window recognition checkpoints so a late interruption does not restart a feature film from zero.
 - [ ] Managed model removal, storage usage, integrity recheck, and cleanup of abandoned downloads.
 - [ ] Persistent diagnostic log files with a privacy-conscious export action.
 

@@ -36,6 +36,10 @@ public final class ExternalToolValidator {
                 "Not needed until transcription is enabled"));
         checks.add(checkModel("VAD model", settings.whisperVadModel(),
                 "Installed automatically with a managed model"));
+        checks.add(checkExecutable("llama.cpp", settings.llamaExecutable(), List.of("--version"), false,
+                cancellationRequested));
+        checks.add(checkModel("Translation model", settings.translationModel(),
+                "Not needed until subtitle translation is enabled"));
         checks.add(checkTemporaryDirectory(settings.temporaryDirectory()));
         return new ToolValidationReport(checks);
     }

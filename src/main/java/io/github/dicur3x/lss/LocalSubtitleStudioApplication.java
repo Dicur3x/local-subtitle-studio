@@ -8,6 +8,7 @@ import io.github.dicur3x.lss.components.HttpDownloadClient;
 import io.github.dicur3x.lss.components.ManagedComponentInstaller;
 import io.github.dicur3x.lss.components.ManagedComponentStore;
 import io.github.dicur3x.lss.components.ManagedToolsService;
+import io.github.dicur3x.lss.components.LlamaReleaseProvider;
 import io.github.dicur3x.lss.components.WhisperReleaseProvider;
 import io.github.dicur3x.lss.infrastructure.process.DefaultExternalProcessRunner;
 import io.github.dicur3x.lss.infrastructure.process.ExternalProcessRunner;
@@ -15,6 +16,7 @@ import io.github.dicur3x.lss.infrastructure.tools.ExternalToolValidator;
 import io.github.dicur3x.lss.media.MediaProbe;
 import io.github.dicur3x.lss.media.ffprobe.FfprobeMediaProbe;
 import io.github.dicur3x.lss.models.WhisperModelManager;
+import io.github.dicur3x.lss.models.TranslationModelManager;
 import io.github.dicur3x.lss.recovery.RecoveryStore;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
 import io.github.dicur3x.lss.settings.JsonSettingsRepository;
@@ -153,9 +155,13 @@ public final class LocalSubtitleStudioApplication extends Application {
         return new ManagedToolsService(
                 new FfmpegReleaseProvider(downloadClient),
                 new WhisperReleaseProvider(downloadClient, objectMapper),
+                new LlamaReleaseProvider(downloadClient, objectMapper),
                 store,
                 new ManagedComponentInstaller(downloadClient, store),
                 new WhisperModelManager(applicationData.resolve("models"), downloadClient, objectMapper),
+                new TranslationModelManager(
+                        applicationData.resolve("models").resolve("translation"),
+                        downloadClient, objectMapper),
                 settingsManager,
                 processRunner
         );

@@ -23,13 +23,24 @@ class LlamaCppTranslationEngineTest {
     void invokesStructuredLocalTranslationAndParsesStableIds() throws Exception {
         Path model = Files.createFile(temporaryDirectory.resolve("translation.gguf"));
         List<String> captured = new ArrayList<>();
+        List<Path> schemaFiles = new ArrayList<>();
         ExternalProcessRunner runner = (command, cancellationRequested) -> {
             captured.addAll(command);
+            Path schemaFile = Path.of(command.get(command.indexOf("--json-schema-file") + 1));
+            schemaFiles.add(schemaFile);
+            assertTrue(Files.readString(schemaFile).contains("\"translations\""));
+            String prompt = command.get(command.indexOf("--prompt") + 1);
+            assertTrue(prompt.contains("from en to ru"));
+            assertTrue(prompt.contains("ID: 1"));
+            assertTrue(prompt.contains("TRANSLATE: no"));
+            assertTrue(prompt.contains("Earlier ″context″"));
+            assertTrue(prompt.contains("ID: 2"));
+            assertTrue(prompt.contains("TRANSLATE: yes"));
             return new ProcessResult(0,
                     "```json\n{\"translations\":[{\"id\":2,\"text\":\"Привет!\"}]}\n```", "");
         };
         TranslationBatch batch = new TranslationBatch("EN", "RU", List.of(
-                new TranslationCueInput(1, "Earlier context", false),
+                new TranslationCueInput(1, "Earlier \"context\"", false),
                 new TranslationCueInput(2, "Hello!", true),
                 new TranslationCueInput(3, "Later context", false)));
 
@@ -38,14 +49,10 @@ class LlamaCppTranslationEngineTest {
 
         assertEquals(List.of(new TranslatedText(2, "Привет!")), result.translations());
         assertEquals("llama-cli", captured.getFirst());
-        assertTrue(captured.contains("--json-schema"));
-        assertTrue(captured.contains("--reasoning-budget"));
-        String prompt = captured.get(captured.indexOf("--prompt") + 1);
-        assertTrue(prompt.contains("from en to ru"));
-        assertTrue(prompt.contains("\"id\":1"));
-        assertTrue(prompt.contains("\"translate\":false"));
-        assertTrue(prompt.contains("\"id\":2"));
-        assertTrue(prompt.contains("\"translate\":true"));
+        assertTrue(captured.contains("--json-schema-file"));
+        assertTrue(captured.contains("--no-jinja"));
+        assertTrue(captured.contains("--prompt"));
+        assertTrue(schemaFiles.stream().allMatch(Files::notExists));
     }
 
     @Test

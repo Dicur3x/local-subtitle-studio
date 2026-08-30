@@ -1,6 +1,6 @@
 # ADR 0008: Context-preserving local subtitle translation
 
-- Status: accepted; implementation foundation in progress
+- Status: accepted; managed engine/model foundation complete, end-to-end quality work in progress
 - Date: 2026-08-29
 
 ## Context
@@ -15,7 +15,7 @@ Translation output must never change cue IDs or timestamps. Model output is not 
 
 `TranslationEngine` accepts a language pair and a contextual `TranslationBatch`, then returns only `ID → translated text`. The orchestration layer is independent of a concrete local or optional cloud backend.
 
-The first implementation candidate is local structured generation through [llama.cpp](https://github.com/ggml-org/llama.cpp). The first model to evaluate is the official [Qwen3 1.7B GGUF](https://huggingface.co/Qwen/Qwen3-1.7B-GGUF), published under Apache-2.0. This model is not enabled in the UI or downloaded automatically until its exact artifact, checksum, size, attribution, Windows performance, and English↔Russian subtitle quality have been verified.
+The first implementation is local structured generation through [llama.cpp](https://github.com/ggml-org/llama.cpp). Components can install an official checksummed Windows x64 CPU build and three curated official Qwen3 GGUF profiles under Apache-2.0: 0.6B Q8_0, 1.7B Q8_0 (recommended), and 4B Q4_K_M. Exact artifact size, SHA-256, source, and license metadata are verified before activation. No translation model downloads automatically. The main translation flow remains disabled until Windows performance and real English↔Russian subtitle quality have been evaluated.
 
 ### Context batches
 
@@ -43,7 +43,7 @@ Translation happens after recognition and review/correction. Existing files rema
 
 ## Acceptance criteria before enabling translation in the main UI
 
-- Managed llama.cpp and translation-model installation with trusted upstream URLs, exact checksums, license text, and visible disk size.
+- [complete] Managed llama.cpp and translation-model installation with trusted upstream URLs, exact checksums, license text, and visible disk size.
 - A real English→Russian film sample and a Russian→English sample complete locally without losing or inventing IDs.
 - Names, numbers, negation, sentence fragments, and dialogue spanning batch boundaries are included in the evaluation set.
 - Cancellation, malformed model output, and insufficient disk space have user-facing errors.

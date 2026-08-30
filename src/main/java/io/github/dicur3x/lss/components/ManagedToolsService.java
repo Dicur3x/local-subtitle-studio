@@ -3,6 +3,9 @@ package io.github.dicur3x.lss.components;
 import io.github.dicur3x.lss.infrastructure.process.ExternalProcessRunner;
 import io.github.dicur3x.lss.infrastructure.process.ProcessResult;
 import io.github.dicur3x.lss.models.InstalledModelBundle;
+import io.github.dicur3x.lss.models.InstalledTranslationModel;
+import io.github.dicur3x.lss.models.TranslationModelManager;
+import io.github.dicur3x.lss.models.TranslationModelProfile;
 import io.github.dicur3x.lss.models.WhisperModelManager;
 import io.github.dicur3x.lss.models.WhisperModelProfile;
 import io.github.dicur3x.lss.settings.ApplicationSettings;
@@ -26,6 +29,8 @@ public final class ManagedToolsService {
             "(?im)^ffmpeg version\\s+([^\\s]+)");
     private static final Pattern WHISPER_VERSION = Pattern.compile(
             "(?im)(?:whisper(?:\\.cpp)?\\s+)?version[:\\s]+v?([0-9]+(?:\\.[0-9]+){1,3})");
+    private static final Pattern LLAMA_BUILD_VERSION = Pattern.compile(
+            "(?im)^version:.*?\\bbuild\\s+([0-9]+)\\b");
     private static final Pattern VERSION_NUMBER = Pattern.compile(
             "(?i)(?:^|[^0-9])v?([0-9]+(?:\\.[0-9]+){1,3})(?=$|[^0-9])");
 
@@ -33,15 +38,18 @@ public final class ManagedToolsService {
     private final ManagedComponentStore componentStore;
     private final ManagedComponentInstaller componentInstaller;
     private final WhisperModelManager modelManager;
+    private final TranslationModelManager translationModelManager;
     private final SettingsManager settingsManager;
     private final ExternalProcessRunner processRunner;
 
     public ManagedToolsService(
             ComponentReleaseProvider ffmpegReleaseProvider,
             ComponentReleaseProvider whisperReleaseProvider,
+            ComponentReleaseProvider llamaReleaseProvider,
             ManagedComponentStore componentStore,
             ManagedComponentInstaller componentInstaller,
             WhisperModelManager modelManager,
+            TranslationModelManager translationModelManager,
             SettingsManager settingsManager,
             ExternalProcessRunner processRunner
     ) {
@@ -50,9 +58,13 @@ public final class ManagedToolsService {
                 Objects.requireNonNull(ffmpegReleaseProvider, "ffmpegReleaseProvider"));
         releaseProviders.put(ManagedComponent.WHISPER_CPP,
                 Objects.requireNonNull(whisperReleaseProvider, "whisperReleaseProvider"));
+        releaseProviders.put(ManagedComponent.LLAMA_CPP,
+                Objects.requireNonNull(llamaReleaseProvider, "llamaReleaseProvider"));
         this.componentStore = Objects.requireNonNull(componentStore, "componentStore");
         this.componentInstaller = Objects.requireNonNull(componentInstaller, "componentInstaller");
         this.modelManager = Objects.requireNonNull(modelManager, "modelManager");
+        this.translationModelManager = Objects.requireNonNull(
+                translationModelManager, "translationModelManager");
         this.settingsManager = Objects.requireNonNull(settingsManager, "settingsManager");
         this.processRunner = Objects.requireNonNull(processRunner, "processRunner");
     }
@@ -77,11 +89,15 @@ public final class ManagedToolsService {
         InstalledComponent installed = componentInstaller.install(release, progress, cancellationRequested);
         try {
             ApplicationSettings current = settingsManager.current();
-            ApplicationSettings updated = installed.component() == ManagedComponent.FFMPEG
-                    ? current.withManagedFfmpeg(
-                    installed.primaryExecutablePath().toString(),
-                    installed.secondaryExecutablePath().toString())
-                    : current.withManagedWhisper(installed.primaryExecutablePath().toString());
+            ApplicationSettings updated = switch (installed.component()) {
+                case FFMPEG -> current.withManagedFfmpeg(
+                        installed.primaryExecutablePath().toString(),
+                        installed.secondaryExecutablePath().toString());
+                case WHISPER_CPP -> current.withManagedWhisper(
+                        installed.primaryExecutablePath().toString());
+                case LLAMA_CPP -> current.withManagedLlama(
+                        installed.primaryExecutablePath().toString());
+            };
             settingsManager.save(updated);
             return installed;
         } catch (SettingsException exception) {
@@ -100,6 +116,31 @@ public final class ManagedToolsService {
 
     public boolean isModelInstalled(WhisperModelProfile profile) {
         return modelManager.isInstalled(profile);
+    }
+
+    public Optional<InstalledTranslationModel> currentTranslationModel() throws ComponentException {
+        return translationModelManager.current();
+    }
+
+    public boolean isTranslationModelInstalled(TranslationModelProfile profile) {
+        return translationModelManager.isInstalled(profile);
+    }
+
+    public InstalledTranslationModel installTranslationModel(
+            TranslationModelProfile profile,
+            OperationProgress progress,
+            BooleanSupplier cancellationRequested
+    ) throws ComponentException {
+        InstalledTranslationModel model = translationModelManager.install(
+                profile, progress, cancellationRequested);
+        try {
+            settingsManager.save(settingsManager.current().withManagedTranslationModel(
+                    model.modelPath().toString()));
+            return model;
+        } catch (SettingsException exception) {
+            throw new ComponentException(
+                    "The translation model was installed, but its path could not be saved.", exception);
+        }
     }
 
     public Path managedStorageDirectory() {
@@ -122,9 +163,11 @@ public final class ManagedToolsService {
     }
 
     private String configuredPath(ManagedComponent component) {
-        return component == ManagedComponent.FFMPEG
-                ? settingsManager.current().ffmpegExecutable()
-                : settingsManager.current().whisperExecutable();
+        return switch (component) {
+            case FFMPEG -> settingsManager.current().ffmpegExecutable();
+            case WHISPER_CPP -> settingsManager.current().whisperExecutable();
+            case LLAMA_CPP -> settingsManager.current().llamaExecutable();
+        };
     }
 
     private String detectVersion(
@@ -143,9 +186,19 @@ public final class ManagedToolsService {
                 return "";
             }
             String output = result.standardOutput() + System.lineSeparator() + result.standardError();
-            var matcher = (component == ManagedComponent.FFMPEG ? FFMPEG_VERSION : WHISPER_VERSION)
-                    .matcher(output);
-            return matcher.find() ? matcher.group(1) : "";
+            if (component == ManagedComponent.LLAMA_CPP) {
+                return llamaBuildVersion(output);
+            }
+            Pattern versionPattern = switch (component) {
+                case FFMPEG -> FFMPEG_VERSION;
+                case WHISPER_CPP -> WHISPER_VERSION;
+                case LLAMA_CPP -> throw new IllegalStateException("Handled above");
+            };
+            var matcher = versionPattern.matcher(output);
+            if (!matcher.find()) {
+                return "";
+            }
+            return matcher.group(1);
         } catch (CancellationException exception) {
             throw exception;
         } catch (InterruptedException exception) {
@@ -158,7 +211,15 @@ public final class ManagedToolsService {
 
     static String normalizeVersion(String version) {
         String normalized = version == null ? "" : version.strip().toLowerCase();
+        if (normalized.matches("b[0-9]+")) {
+            return normalized.substring(1);
+        }
         var matcher = VERSION_NUMBER.matcher(normalized);
         return matcher.find() ? matcher.group(1) : normalized;
+    }
+
+    static String llamaBuildVersion(String output) {
+        var matcher = LLAMA_BUILD_VERSION.matcher(output == null ? "" : output);
+        return matcher.find() ? "b" + matcher.group(1) : "";
     }
 }

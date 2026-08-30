@@ -55,6 +55,33 @@ class ManagedComponentInstallerTest {
         }
     }
 
+    @Test
+    void installsLlamaCliAndAddsItsLicense() throws Exception {
+        byte[] archive = llamaArchive();
+        String checksum = sha256(archive);
+        Path componentRoot = tempDirectory.resolve("components-llama");
+        var store = new ManagedComponentStore(componentRoot, new ObjectMapper());
+        var installer = new ManagedComponentInstaller(new ArchiveClient(archive), store);
+        var release = new ComponentRelease(
+                ManagedComponent.LLAMA_CPP,
+                "b10621",
+                URI.create("https://downloads.example.test/llama.zip"),
+                Optional.of(checksum),
+                URI.create("https://github.com/ggml-org/llama.cpp/releases/tag/v0.3.0"),
+                "Test release notes",
+                URI.create("https://github.com/ggml-org/llama.cpp/archive/refs/tags/v0.3.0.tar.gz"),
+                "MIT License"
+        );
+
+        InstalledComponent installed = installer.install(
+                release, (phase, done, total) -> { }, () -> false);
+
+        assertEquals("llama-cli.exe", installed.primaryExecutablePath().getFileName().toString());
+        assertTrue(Files.isRegularFile(installed.primaryExecutablePath().getParent().getParent()
+                .resolve("LICENSE-llama.cpp.txt")));
+        assertEquals(installed, store.current(ManagedComponent.LLAMA_CPP).orElseThrow());
+    }
+
     private static byte[] ffmpegArchive() throws IOException {
         var bytes = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
@@ -62,6 +89,15 @@ class ManagedComponentInstallerTest {
             add(zip, "ffmpeg-9.0.1/bin/ffprobe.exe", "ffprobe");
             add(zip, "ffmpeg-9.0.1/LICENSE.txt", "GPLv3");
             add(zip, "ffmpeg-9.0.1/build.txt", "configuration");
+        }
+        return bytes.toByteArray();
+    }
+
+    private static byte[] llamaArchive() throws IOException {
+        var bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            add(zip, "llama-b10621/llama-cli.exe", "llama");
+            add(zip, "llama-b10621/ggml.dll", "library");
         }
         return bytes.toByteArray();
     }

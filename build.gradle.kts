@@ -85,6 +85,12 @@ tasks.register<Test>("realMediaTest") {
     providers.gradleProperty("realTailToleranceSeconds").orNull?.let {
         systemProperty("lss.real.tail.tolerance.seconds", it)
     }
+    providers.gradleProperty("realLlama").orNull?.let {
+        systemProperty("lss.real.llama", it)
+    }
+    providers.gradleProperty("realTranslationModel").orNull?.let {
+        systemProperty("lss.real.translation.model", it)
+    }
 }
 
 val prepareJpackageInput = tasks.register<Sync>("prepareJpackageInput") {

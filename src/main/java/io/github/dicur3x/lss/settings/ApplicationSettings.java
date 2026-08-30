@@ -10,13 +10,15 @@ public record ApplicationSettings(
         String whisperExecutable,
         String whisperModel,
         String whisperVadModel,
+        String llamaExecutable,
+        String translationModel,
         String temporaryDirectory,
         String managedStorageDirectory,
         SubtitlePreferences subtitlePreferences,
         OutputPreferences outputPreferences,
         UiLanguage uiLanguage
 ) {
-    public static final int CURRENT_SCHEMA_VERSION = 7;
+    public static final int CURRENT_SCHEMA_VERSION = 8;
 
     public ApplicationSettings {
         schemaVersion = schemaVersion <= 0 ? CURRENT_SCHEMA_VERSION : schemaVersion;
@@ -25,6 +27,8 @@ public record ApplicationSettings(
         whisperExecutable = normalize(whisperExecutable);
         whisperModel = normalize(whisperModel);
         whisperVadModel = normalize(whisperVadModel);
+        llamaExecutable = normalize(llamaExecutable);
+        translationModel = normalize(translationModel);
         temporaryDirectory = normalize(temporaryDirectory);
         managedStorageDirectory = normalize(managedStorageDirectory);
         subtitlePreferences = subtitlePreferences == null ? SubtitlePreferences.defaults() : subtitlePreferences;
@@ -40,12 +44,30 @@ public record ApplicationSettings(
             String whisperModel,
             String whisperVadModel,
             String temporaryDirectory,
+            String managedStorageDirectory,
             SubtitlePreferences subtitlePreferences,
             OutputPreferences outputPreferences,
             UiLanguage uiLanguage
     ) {
         this(schemaVersion, ffmpegExecutable, ffprobeExecutable, whisperExecutable,
-                whisperModel, whisperVadModel, temporaryDirectory, "",
+                whisperModel, whisperVadModel, "", "", temporaryDirectory, managedStorageDirectory,
+                subtitlePreferences, outputPreferences, uiLanguage);
+    }
+
+    public ApplicationSettings(
+            int schemaVersion,
+            String ffmpegExecutable,
+            String ffprobeExecutable,
+            String whisperExecutable,
+            String whisperModel,
+            String whisperVadModel,
+            String temporaryDirectory,
+            SubtitlePreferences subtitlePreferences,
+            OutputPreferences outputPreferences,
+            UiLanguage uiLanguage
+    ) {
+        this(schemaVersion, ffmpegExecutable, ffprobeExecutable, whisperExecutable,
+                whisperModel, whisperVadModel, "", "", temporaryDirectory, "",
                 subtitlePreferences, outputPreferences, uiLanguage);
     }
 
@@ -57,6 +79,8 @@ public record ApplicationSettings(
                 configuredValue("lss.whisper.path", "LSS_WHISPER_PATH", ""),
                 configuredValue("lss.whisper.model", "LSS_WHISPER_MODEL", ""),
                 configuredValue("lss.whisper.vad.model", "LSS_WHISPER_VAD_MODEL", ""),
+                configuredValue("lss.llama.path", "LSS_LLAMA_PATH", ""),
+                configuredValue("lss.translation.model", "LSS_TRANSLATION_MODEL", ""),
                 configuredValue("lss.temp.path", "LSS_TEMP_PATH", ""),
                 configuredValue("lss.storage.path", "LSS_STORAGE_PATH", ""),
                 SubtitlePreferences.defaults(),
@@ -67,31 +91,50 @@ public record ApplicationSettings(
 
     public ApplicationSettings withManagedFfmpeg(String ffmpeg, String ffprobe) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpeg, ffprobe, whisperExecutable,
-                whisperModel, whisperVadModel, temporaryDirectory, managedStorageDirectory,
+                whisperModel, whisperVadModel, llamaExecutable, translationModel,
+                temporaryDirectory, managedStorageDirectory,
                 subtitlePreferences, outputPreferences, uiLanguage);
     }
 
     public ApplicationSettings withManagedWhisper(String whisper) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable, whisper,
-                whisperModel, whisperVadModel, temporaryDirectory, managedStorageDirectory,
+                whisperModel, whisperVadModel, llamaExecutable, translationModel,
+                temporaryDirectory, managedStorageDirectory,
                 subtitlePreferences, outputPreferences, uiLanguage);
     }
 
     public ApplicationSettings withManagedModels(String model, String vadModel) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable,
-                whisperExecutable, model, vadModel, temporaryDirectory, managedStorageDirectory,
+                whisperExecutable, model, vadModel, llamaExecutable, translationModel,
+                temporaryDirectory, managedStorageDirectory,
+                subtitlePreferences, outputPreferences, uiLanguage);
+    }
+
+    public ApplicationSettings withManagedLlama(String llama) {
+        return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable,
+                whisperExecutable, whisperModel, whisperVadModel, llama, translationModel,
+                temporaryDirectory, managedStorageDirectory,
+                subtitlePreferences, outputPreferences, uiLanguage);
+    }
+
+    public ApplicationSettings withManagedTranslationModel(String model) {
+        return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable,
+                whisperExecutable, whisperModel, whisperVadModel, llamaExecutable, model,
+                temporaryDirectory, managedStorageDirectory,
                 subtitlePreferences, outputPreferences, uiLanguage);
     }
 
     public ApplicationSettings withOnboarding(UiLanguage language, OutputPreferences output) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable,
-                whisperExecutable, whisperModel, whisperVadModel, temporaryDirectory, managedStorageDirectory,
+                whisperExecutable, whisperModel, whisperVadModel, llamaExecutable, translationModel,
+                temporaryDirectory, managedStorageDirectory,
                 subtitlePreferences, output, language);
     }
 
     public ApplicationSettings withManagedStorageDirectory(String directory) {
         return new ApplicationSettings(CURRENT_SCHEMA_VERSION, ffmpegExecutable, ffprobeExecutable,
-                whisperExecutable, whisperModel, whisperVadModel, temporaryDirectory, directory,
+                whisperExecutable, whisperModel, whisperVadModel, llamaExecutable, translationModel,
+                temporaryDirectory, directory,
                 subtitlePreferences, outputPreferences, uiLanguage);
     }
 

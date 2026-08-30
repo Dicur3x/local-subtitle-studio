@@ -66,5 +66,7 @@ class JsonSettingsRepositoryTest {
         assertEquals(42, loaded.subtitlePreferences().maximumCharactersPerLine());
         assertEquals(2, loaded.subtitlePreferences().maximumLines());
         assertEquals(OutputLocation.BESIDE_VIDEO, loaded.outputPreferences().location());
+        assertEquals("", loaded.llamaExecutable());
+        assertEquals("", loaded.translationModel());
     }
 }
