@@ -65,6 +65,36 @@ class SettingsPathsTest {
         }
     }
 
+    @Test
+    void exposesTheResolvedSystemTemporaryDirectory() {
+        String previous = System.getProperty("java.io.tmpdir");
+        try {
+            Path chosen = temporaryDirectory.resolve("system-temp");
+            System.setProperty("java.io.tmpdir", chosen.toString());
+
+            assertEquals(chosen.toAbsolutePath(), SettingsPaths.systemTemporaryDirectory());
+        } finally {
+            restore("java.io.tmpdir", previous);
+        }
+    }
+
+    @Test
+    void invalidSystemTemporaryDirectoryFallsBackToApplicationData() {
+        String previousTemp = System.getProperty("java.io.tmpdir");
+        String previousData = System.getProperty("lss.data.path");
+        try {
+            Path data = temporaryDirectory.resolve("data");
+            System.setProperty("java.io.tmpdir", "\0invalid");
+            System.setProperty("lss.data.path", data.toString());
+
+            assertEquals(data.resolve("temp").toAbsolutePath(),
+                    SettingsPaths.systemTemporaryDirectory());
+        } finally {
+            restore("java.io.tmpdir", previousTemp);
+            restore("lss.data.path", previousData);
+        }
+    }
+
     private static void restore(String name, String value) {
         if (value == null) {
             System.clearProperty(name);

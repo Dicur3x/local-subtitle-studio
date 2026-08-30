@@ -45,4 +45,16 @@ public final class SettingsPaths {
             return applicationDataDirectory().toAbsolutePath().normalize();
         }
     }
+
+    public static Path systemTemporaryDirectory() {
+        String configured = System.getProperty("java.io.tmpdir");
+        if (configured == null || configured.isBlank()) {
+            return applicationDataDirectory().resolve("temp").toAbsolutePath().normalize();
+        }
+        try {
+            return Path.of(configured).toAbsolutePath().normalize();
+        } catch (InvalidPathException exception) {
+            return applicationDataDirectory().resolve("temp").toAbsolutePath().normalize();
+        }
+    }
 }
