@@ -231,6 +231,32 @@
     -fx-background-color: #2d3545;
 }
 
+.settings-dialog .titled-pane {
+    -fx-text-fill: #e8ecf3;
+}
+
+.settings-dialog .titled-pane > .title {
+    -fx-background-color: #242c3b;
+    -fx-background-radius: 7px;
+    -fx-border-color: #3b465b;
+    -fx-border-radius: 7px;
+}
+
+.settings-dialog .titled-pane:expanded > .title {
+    -fx-background-radius: 7px 7px 0 0;
+    -fx-border-radius: 7px 7px 0 0;
+}
+
+.settings-dialog .titled-pane > .title > .arrow-button .arrow {
+    -fx-background-color: #8ba4ff;
+}
+
+.settings-dialog .titled-pane > *.content {
+    -fx-background-color: #181d29;
+    -fx-border-color: #3b465b;
+    -fx-border-radius: 0 0 7px 7px;
+}
+
 .section-title {
     -fx-text-fill: #f3f5fa;
     -fx-font-size: 16px;
